@@ -448,6 +448,34 @@ export const notifyDriverArriving = async (employeeName: string, location: strin
   });
 };
 
+export const notifyTaskStarted = async (taskTitle: string, employeeName: string, supervisorId: string) => {
+  return sendPushNotification({
+    title: '▶️ Task Started',
+    body: `${employeeName} started: "${taskTitle}"`,
+    employeeIds: [supervisorId],
+    data: {
+      action: 'task_started',
+      url: '/department'
+    }
+  });
+};
+
+export const notifyTaskCompleted = async (taskTitle: string, employeeName: string, approverIds: string[]) => {
+  return sendPushNotification({
+    title: '✅ Task Completed',
+    body: `${employeeName} completed: "${taskTitle}" - Pending approval`,
+    employeeIds: approverIds,
+    data: {
+      action: 'task_completed',
+      url: '/department'
+    },
+    actions: [
+      { action: 'approve', title: 'Review' },
+      { action: 'dismiss', title: 'Later' }
+    ]
+  });
+};
+
 // Rejected Task Auto-Reassignment
 export const notifyTaskReassigned = async (taskTitle: string, previousEmployeeId: string, newEmployeeId: string, reassignedByName: string) => {
   // Notify the employee who will now work on this task
