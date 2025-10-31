@@ -1,0 +1,4 @@
+project_id = "pwnbvxncbiykyanwydkm"
+
+[functions.upload-task-photo]
+verify_jwt = false
