@@ -18,21 +18,42 @@ const TaskCompletion = ({ taskId, onComplete, isOpen, onClose }: TaskCompletionP
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [useCamera, setUseCamera] = useState(false);
+  const [cameraLoading, setCameraLoading] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
 
   const startCamera = async () => {
     try {
+      setCameraLoading(true);
+      // Stop any existing stream first
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(track => track.stop());
+        streamRef.current = null;
+      }
+
       const stream = await navigator.mediaDevices.getUserMedia({ 
-        video: { facingMode: "environment" } 
+        video: { 
+          facingMode: "environment",
+          width: { ideal: 1280 },
+          height: { ideal: 720 }
+        } 
       });
+      
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
         streamRef.current = stream;
+        // Wait for video to be ready
+        videoRef.current.onloadedmetadata = () => {
+          setUseCamera(true);
+          setCameraLoading(false);
+        };
+      } else {
+        setCameraLoading(false);
       }
-      setUseCamera(true);
     } catch (error) {
-      showError("Failed to access camera");
+      console.error("Camera error:", error);
+      setCameraLoading(false);
+      showError("Failed to access camera. Please check permissions.");
     }
   };
 
@@ -45,22 +66,30 @@ const TaskCompletion = ({ taskId, onComplete, isOpen, onClose }: TaskCompletionP
   };
 
   const capturePhoto = () => {
-    if (videoRef.current) {
+    if (videoRef.current && videoRef.current.readyState >= 2) {
       const canvas = document.createElement("canvas");
-      canvas.width = videoRef.current.videoWidth;
-      canvas.height = videoRef.current.videoHeight;
+      const video = videoRef.current;
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
       const ctx = canvas.getContext("2d");
       if (ctx) {
-        ctx.drawImage(videoRef.current, 0, 0);
+        // Flip the image back since we mirrored the video
+        ctx.translate(canvas.width, 0);
+        ctx.scale(-1, 1);
+        ctx.drawImage(video, 0, 0);
         canvas.toBlob((blob) => {
           if (blob) {
             const file = new File([blob], `task-${taskId}-${Date.now()}.jpg`, { type: "image/jpeg" });
             setPhotoFile(file);
             setPhotoPreview(URL.createObjectURL(blob));
             stopCamera();
+          } else {
+            showError("Failed to capture photo");
           }
-        }, "image/jpeg", 0.8);
+        }, "image/jpeg", 0.9);
       }
+    } else {
+      showError("Camera is not ready. Please wait a moment and try again.");
     }
   };
 
@@ -171,14 +200,21 @@ const TaskCompletion = ({ taskId, onComplete, isOpen, onClose }: TaskCompletionP
       setPhotoFile(null);
       setPhotoPreview(null);
       setUseCamera(false);
-      // Start camera automatically after a small delay to ensure state is reset
+      setCameraLoading(false);
+      
+      // Start camera automatically when dialog opens
       const timer = setTimeout(() => {
         startCamera();
-      }, 100);
-      return () => clearTimeout(timer);
+      }, 300); // Small delay to ensure dialog is fully rendered
+      
+      return () => {
+        clearTimeout(timer);
+        stopCamera();
+      };
     } else {
       // Cleanup: stop camera when dialog closes
       stopCamera();
+      setCameraLoading(false);
     }
   }, [isOpen]);
 
@@ -190,16 +226,24 @@ const TaskCompletion = ({ taskId, onComplete, isOpen, onClose }: TaskCompletionP
         </DialogHeader>
 
         <div className="space-y-3 sm:space-y-4">
-          {useCamera && (
+          {cameraLoading && (
+            <div className="flex items-center justify-center py-8">
+              <p className="text-muted-foreground">Opening camera...</p>
+            </div>
+          )}
+          
+          {useCamera && !cameraLoading && (
             <div className="space-y-2 sm:space-y-3">
               <video
                 ref={videoRef}
                 autoPlay
                 playsInline
+                muted
                 className="w-full rounded-lg bg-black max-h-64 sm:max-h-96"
+                style={{ transform: 'scaleX(-1)' }} // Mirror the video for better UX
               />
               <div className="flex flex-col sm:flex-row gap-2">
-                <Button onClick={capturePhoto} className="flex-1" size="sm">
+                <Button onClick={capturePhoto} className="flex-1 bg-success hover:bg-success/90" size="sm">
                   <Camera className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-2" />
                   Capture Photo
                 </Button>
@@ -208,6 +252,12 @@ const TaskCompletion = ({ taskId, onComplete, isOpen, onClose }: TaskCompletionP
                   Cancel
                 </Button>
               </div>
+            </div>
+          )}
+
+          {!useCamera && !cameraLoading && !photoPreview && (
+            <div className="flex items-center justify-center py-8">
+              <p className="text-muted-foreground">Waiting for camera...</p>
             </div>
           )}
 
