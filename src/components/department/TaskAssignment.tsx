@@ -8,7 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { showSuccess, showError, showConfirm } from "@/lib/sweetalert";
-import { Plus, MapPin, Clock, User, AlertCircle, Check, ChevronsUpDown, Power, PowerOff, Trash2 } from "lucide-react";
+import { Plus, MapPin, Clock, User, AlertCircle, Check, ChevronsUpDown, Power, PowerOff, Trash2, Play } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { format } from "date-fns";
 import { Calendar } from "@/components/ui/calendar";
@@ -16,7 +16,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { CalendarIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
-import { notifyTaskAssigned, notifyTaskDeactivated, notifyTaskActivated, notifyTaskDeleted } from "@/lib/notificationService";
+import { notifyTaskAssigned, notifyTaskDeactivated, notifyTaskActivated, notifyTaskDeleted, notifyTaskStarted } from "@/lib/notificationService";
 
 interface Task {
   id: string;
@@ -159,6 +159,67 @@ const TaskAssignment = ({ departmentId, assignedBy }: TaskAssignmentProps) => {
         await notifyTaskActivated(task.title, task.assigned_to);
       } else {
         await notifyTaskDeactivated(task.title, task.assigned_to);
+      }
+    }
+    
+    fetchTasks();
+  };
+
+  const handleStartTask = async (taskId: string, isActive: boolean) => {
+    if (!isActive) {
+      showError("This task is currently inactive and cannot be started");
+      return;
+    }
+
+    const task = tasks.find(t => t.id === taskId);
+    
+    if (!task) {
+      showError("Task not found");
+      return;
+    }
+
+    // Get task details for notification
+    const { data: taskData } = await supabase
+      .from("tasks")
+      .select("title, assigned_by, assigned_to")
+      .eq("id", taskId)
+      .single();
+
+    const { error } = await supabase
+      .from("tasks")
+      .update({
+        status: "in_progress",
+        started_at: new Date().toISOString(),
+      })
+      .eq("id", taskId);
+
+    if (error) {
+      showError("Failed to start task");
+      return;
+    }
+
+    showSuccess("Task started successfully! Time tracking began.");
+    
+    // Send notification if task is assigned to an employee
+    if (taskData?.assigned_to) {
+      const { data: employeeData } = await supabase
+        .from("employees")
+        .select("name")
+        .eq("id", assignedBy)
+        .single();
+      
+      const departmentHeadName = employeeData?.name || "Department Head";
+      const { data: assignedEmployeeData } = await supabase
+        .from("employees")
+        .select("name")
+        .eq("id", taskData.assigned_to)
+        .single();
+      
+      const employeeName = assignedEmployeeData?.name || "Employee";
+      
+      // Notify the supervisor/admin who assigned the task
+      if (taskData.assigned_by) {
+        await notifyTaskStarted(taskData.title, employeeName, taskData.assigned_by);
       }
     }
     
@@ -510,6 +571,16 @@ const TaskAssignment = ({ departmentId, assignedBy }: TaskAssignmentProps) => {
 
             {/* Action Buttons */}
             <div className="flex flex-wrap gap-2">
+              {task.status === "pending" && task.is_active && (
+                <Button
+                  size="sm"
+                  onClick={() => handleStartTask(task.id, task.is_active)}
+                  className="bg-primary"
+                >
+                  <Play className="h-3 w-3 mr-1" />
+                  Start
+                </Button>
+              )}
               <Button
                 size="sm"
                 variant={task.is_active ? "outline" : "default"}
