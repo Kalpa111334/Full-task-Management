@@ -17,6 +17,7 @@ import { CalendarIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { notifyTaskAssigned, notifyTaskDeactivated, notifyTaskActivated, notifyTaskDeleted, notifyTaskStarted } from "@/lib/notificationService";
+import { notifyEmployeeTaskAssigned } from "@/lib/whatsappService";
 
 interface Task {
   id: string;
@@ -288,10 +289,19 @@ const TaskAssignment = ({ departmentId, assignedBy }: TaskAssignmentProps) => {
 
     showSuccess("Task created successfully");
     
-    // Send push notification if employee is assigned
+    // Send notifications if employee is assigned
     if (formData.assigned_to && formData.assigned_to !== 'unassigned' && newTask && newTask.length > 0) {
       const assignerName = assignerData?.name || "Department Head";
+      // Send push notification
       await notifyTaskAssigned(formData.title, formData.assigned_to, assignerName);
+      // Send WhatsApp notification
+      await notifyEmployeeTaskAssigned(
+        formData.title, 
+        formData.assigned_to, 
+        assignerName,
+        formData.deadline?.toISOString(),
+        formData.priority
+      );
     }
     
     setIsDialogOpen(false);

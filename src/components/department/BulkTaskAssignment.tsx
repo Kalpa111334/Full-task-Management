@@ -10,6 +10,8 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { showSuccess, showError } from "@/lib/sweetalert";
 import { Users, Plus, UserCheck } from "lucide-react";
+import { notifyBulkTasksAssigned } from "@/lib/notificationService";
+import { notifyBulkEmployeeTasksAssigned } from "@/lib/whatsappService";
 
 interface Employee {
   id: string;
@@ -116,6 +118,22 @@ const BulkTaskAssignment = ({ departmentId, assignedBy }: BulkTaskAssignmentProp
     }
 
     showSuccess(`Successfully assigned task to ${selectedEmployees.length} employee(s)`);
+    
+    // Get assigner name for notifications
+    const { data: assignerData } = await supabase
+      .from("employees")
+      .select("name")
+      .eq("id", assignedBy)
+      .single();
+    
+    const assignerName = assignerData?.name || "Department Head";
+    
+    // Send push notifications
+    await notifyBulkTasksAssigned(formData.title, selectedEmployees, assignerName);
+    
+    // Send WhatsApp notifications
+    await notifyBulkEmployeeTasksAssigned(formData.title, selectedEmployees, assignerName, 1);
+    
     setShowDialog(false);
     setSelectedEmployees([]);
     setFormData({

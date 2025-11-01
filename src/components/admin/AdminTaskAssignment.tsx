@@ -18,6 +18,7 @@ import { cn } from "@/lib/utils";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Checkbox } from "@/components/ui/checkbox";
 import { notifyTaskAssigned, notifyTaskDeactivated, notifyTaskActivated, notifyTaskDeleted } from "@/lib/notificationService";
+import { notifyDeptHeadTaskAssigned } from "@/lib/whatsappService";
 
 interface Task {
   id: string;
@@ -239,7 +240,10 @@ const AdminTaskAssignment = ({ adminId }: AdminTaskAssignmentProps) => {
         showSuccess("Task assigned to department head successfully");
         if (retryTask && retryTask.length > 0) {
           const adminName = adminData?.name || "Admin";
+          // Send push notification
           await notifyTaskAssigned(formData.title, formData.assigned_to, adminName);
+          // Send WhatsApp notification
+          await notifyDeptHeadTaskAssigned(formData.title, formData.assigned_to, adminName);
         }
         setIsDialogOpen(false);
         resetForm();
@@ -254,10 +258,13 @@ const AdminTaskAssignment = ({ adminId }: AdminTaskAssignmentProps) => {
 
     showSuccess("Task assigned to department head successfully");
 
-    // Send push notification
+    // Send push notification and WhatsApp notification
     if (newTask && newTask.length > 0) {
       const adminName = adminData?.name || "Admin";
+      // Send push notification
       await notifyTaskAssigned(formData.title, formData.assigned_to, adminName);
+      // Send WhatsApp notification
+      await notifyDeptHeadTaskAssigned(formData.title, formData.assigned_to, adminName);
     }
 
     setIsDialogOpen(false);

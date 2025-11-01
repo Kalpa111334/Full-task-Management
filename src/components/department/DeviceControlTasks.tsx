@@ -158,6 +158,24 @@ const DeviceControlTasks = ({ departmentId, departmentName, departmentHeadId }: 
     }
 
     showSuccess(`Successfully created ${tasksToCreate.length} device control task(s)`);
+    
+    // Get department head name for notifications
+    const { data: deptHeadData } = await supabase
+      .from("employees")
+      .select("name")
+      .eq("id", departmentHeadId)
+      .single();
+    
+    const deptHeadName = deptHeadData?.name || "Department Head";
+    
+    // Import notification services at the top of the file
+    // Send notifications to all selected employees
+    const { notifyBulkTasksAssigned } = await import("@/lib/notificationService");
+    const { notifyBulkEmployeeTasksAssigned } = await import("@/lib/whatsappService");
+    
+    await notifyBulkTasksAssigned(formData.title, selectedEmployees, deptHeadName);
+    await notifyBulkEmployeeTasksAssigned(formData.title, selectedEmployees, deptHeadName, 1);
+    
     setShowCreateDialog(false);
     setSelectedEmployees([]);
     setFormData({
