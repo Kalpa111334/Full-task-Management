@@ -16,6 +16,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { CalendarIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { Checkbox } from "@/components/ui/checkbox";
 import { notifyTaskAssigned, notifyTaskDeactivated, notifyTaskActivated, notifyTaskDeleted } from "@/lib/notificationService";
 
 interface Task {
@@ -58,6 +59,7 @@ const AdminTaskAssignment = ({ adminId }: AdminTaskAssignmentProps) => {
     task_type: "normal",
     location_address: "",
     deadline: undefined as Date | undefined,
+    is_required: false,
   });
 
   useEffect(() => {
@@ -210,6 +212,7 @@ const AdminTaskAssignment = ({ adminId }: AdminTaskAssignmentProps) => {
         location_address: formData.location_address || null,
         deadline: formData.deadline?.toISOString() || null,
         status: "pending",
+        is_required: formData.is_required,
       },
     ]).select();
 
@@ -241,6 +244,7 @@ const AdminTaskAssignment = ({ adminId }: AdminTaskAssignmentProps) => {
       task_type: "normal",
       location_address: "",
       deadline: undefined,
+      is_required: false,
     });
   };
 
@@ -428,6 +432,17 @@ const AdminTaskAssignment = ({ adminId }: AdminTaskAssignmentProps) => {
                     </PopoverContent>
                   </Popover>
                 </div>
+              </div>
+
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="is_required"
+                  checked={formData.is_required}
+                  onCheckedChange={(checked) => setFormData({ ...formData, is_required: checked as boolean })}
+                />
+                <Label htmlFor="is_required" className="text-sm font-normal cursor-pointer">
+                  This task is required (Department Head must complete it)
+                </Label>
               </div>
 
               <div className="flex flex-col sm:flex-row gap-2">

@@ -4,17 +4,18 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { showSuccess, showError } from "@/lib/sweetalert";
-import { Users, Building2, ClipboardList, LogOut, Plus, AlertCircle, CheckSquare } from "lucide-react";
+import { Users, Building2, ClipboardList, LogOut, Plus, AlertCircle, CheckSquare, Eye } from "lucide-react";
 import EmployeeManagement from "@/components/admin/EmployeeManagement";
 import DepartmentManagement from "@/components/admin/DepartmentManagement";
 import AdminStats from "@/components/admin/AdminStats";
 import TaskVerification from "@/components/admin/TaskVerification";
 import AdminTaskAssignment from "@/components/admin/AdminTaskAssignment";
+import AdminTaskReview from "@/components/admin/AdminTaskReview";
 import { PushNotificationToggle } from "@/components/PushNotificationToggle";
 
 const Admin = () => {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState<"overview" | "employees" | "departments" | "tasks" | "verifications">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "employees" | "departments" | "tasks" | "verifications" | "review">("overview");
   const [employee, setEmployee] = useState<any>(null);
 
   useEffect(() => {
@@ -121,6 +122,16 @@ const Admin = () => {
             <span className="hidden sm:inline">Task Verification</span>
             <span className="sm:hidden">Verify</span>
           </Button>
+          <Button
+            variant={activeTab === "review" ? "default" : "outline"}
+            onClick={() => setActiveTab("review")}
+            className={`${activeTab === "review" ? "bg-gradient-primary" : ""} whitespace-nowrap flex-shrink-0`}
+            size="sm"
+          >
+            <Eye className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-2" />
+            <span className="hidden sm:inline">Review Tasks</span>
+            <span className="sm:hidden">Review</span>
+          </Button>
         </div>
 
         {/* Content */}
@@ -129,6 +140,7 @@ const Admin = () => {
         {activeTab === "departments" && <DepartmentManagement />}
         {activeTab === "tasks" && <AdminTaskAssignment adminId={employee.id} />}
         {activeTab === "verifications" && <TaskVerification adminId={employee.id} />}
+        {activeTab === "review" && <AdminTaskReview adminId={employee.id} />}
       </div>
     </div>
   );

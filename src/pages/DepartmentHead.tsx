@@ -13,11 +13,12 @@ import TaskApproval from "@/components/department/TaskApproval";
 import TaskReport from "@/components/department/TaskReport";
 import BulkTaskAssignment from "@/components/department/BulkTaskAssignment";
 import DepartmentSelector from "@/components/department/DepartmentSelector";
+import DepartmentHeadAdminTasks from "@/components/department/DepartmentHeadAdminTasks";
 import { PushNotificationToggle } from "@/components/PushNotificationToggle";
 
 const DepartmentHead = () => {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState<"tasks" | "approvals" | "reports" | "map" | "team">("tasks");
+  const [activeTab, setActiveTab] = useState<"tasks" | "admin-tasks" | "approvals" | "reports" | "map" | "team">("tasks");
   const [employee, setEmployee] = useState<any>(null);
 
   useEffect(() => {
@@ -161,6 +162,16 @@ const DepartmentHead = () => {
             <span className="sm:hidden">Tasks</span>
           </Button>
           <Button
+            variant={activeTab === "admin-tasks" ? "default" : "outline"}
+            onClick={() => setActiveTab("admin-tasks")}
+            className={`${activeTab === "admin-tasks" ? "bg-gradient-primary" : ""} whitespace-nowrap flex-shrink-0`}
+            size="sm"
+          >
+            <CheckCircle className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-2" />
+            <span className="hidden sm:inline">Admin Tasks</span>
+            <span className="sm:hidden">Admin</span>
+          </Button>
+          <Button
             variant={activeTab === "approvals" ? "default" : "outline"}
             onClick={() => setActiveTab("approvals")}
             className={`${activeTab === "approvals" ? "bg-gradient-primary" : ""} whitespace-nowrap flex-shrink-0`}
@@ -204,6 +215,7 @@ const DepartmentHead = () => {
 
         {/* Content */}
         {activeTab === "tasks" && <TaskAssignment departmentId={employee.department_id} assignedBy={employee.id} />}
+        {activeTab === "admin-tasks" && <DepartmentHeadAdminTasks departmentHeadId={employee.id} />}
         {activeTab === "approvals" && <TaskApproval departmentId={employee.department_id} approvedBy={employee.id} />}
         {activeTab === "reports" && <TaskReport departmentId={employee?.department_id} />}
         {activeTab === "map" && <MapView departmentId={employee.department_id} />}
