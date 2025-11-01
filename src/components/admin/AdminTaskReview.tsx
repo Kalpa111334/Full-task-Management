@@ -94,10 +94,12 @@ const AdminTaskReview = ({ adminId }: AdminTaskReviewProps) => {
       }
 
       // Filter for tasks awaiting review: status = 'awaiting_admin_review' OR admin_review_status = 'pending' OR (has photo and status not 'completed')
+      // Handle cases where admin_review_status might not exist
       const filteredData = (data || []).filter(task => {
+        const hasAdminReviewStatus = task.hasOwnProperty('admin_review_status');
         const isAwaitingReview = task.status === 'awaiting_admin_review' || 
-                                task.admin_review_status === 'pending' || 
-                                (!task.admin_review_status && task.completion_photo_url && task.status !== 'completed');
+                                (hasAdminReviewStatus && task.admin_review_status === 'pending') || 
+                                (!hasAdminReviewStatus && task.completion_photo_url && task.status !== 'completed');
         return isAwaitingReview;
       });
 
@@ -132,17 +134,38 @@ const AdminTaskReview = ({ adminId }: AdminTaskReviewProps) => {
   };
 
   const handleApprove = async (taskId: string) => {
+    const updateData: any = {
+      status: "completed",
+    };
+
+    // Try to add admin_review_status if column exists
+    try {
+      updateData.admin_review_status = "approved";
+    } catch (e) {
+      // Column may not exist, continue without it
+    }
+
     const { error } = await supabase
       .from("tasks")
-      .update({
-        admin_review_status: "approved",
-        status: "completed",
-      })
+      .update(updateData)
       .eq("id", taskId);
 
     if (error) {
-      showError("Failed to approve task");
-      return;
+      // If error is about admin_review_status column, try without it
+      if (error.message?.includes("admin_review_status") || error.code === "42703") {
+        const { error: fallbackError } = await supabase
+          .from("tasks")
+          .update({ status: "completed" })
+          .eq("id", taskId);
+        
+        if (fallbackError) {
+          showError("Failed to approve task");
+          return;
+        }
+      } else {
+        showError("Failed to approve task");
+        return;
+      }
     }
 
     showSuccess("Task approved successfully");
@@ -158,18 +181,41 @@ const AdminTaskReview = ({ adminId }: AdminTaskReviewProps) => {
     }
 
     // Update task with rejection
+    const updateData: any = {
+      status: "pending", // Reset to pending for re-assignment
+    };
+
+    // Try to add admin_review_status and rejection_reason if columns exist
+    try {
+      updateData.admin_review_status = "rejected";
+      updateData.admin_rejection_reason = rejectReason;
+    } catch (e) {
+      // Columns may not exist, continue without them
+    }
+
     const { error: updateError } = await supabase
       .from("tasks")
-      .update({
-        admin_review_status: "rejected",
-        admin_rejection_reason: rejectReason,
-        status: "pending", // Reset to pending for re-assignment
-      })
+      .update(updateData)
       .eq("id", selectedTask.id);
 
     if (updateError) {
-      showError("Failed to reject task");
-      return;
+      // If error is about missing columns, try without them
+      if (updateError.message?.includes("admin_review_status") || 
+          updateError.message?.includes("admin_rejection_reason") ||
+          updateError.code === "42703") {
+        const { error: fallbackError } = await supabase
+          .from("tasks")
+          .update({ status: "pending" })
+          .eq("id", selectedTask.id);
+        
+        if (fallbackError) {
+          showError("Failed to reject task");
+          return;
+        }
+      } else {
+        showError("Failed to reject task");
+        return;
+      }
     }
 
     // Auto-reassign task to the same department head

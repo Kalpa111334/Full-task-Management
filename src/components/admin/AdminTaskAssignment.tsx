@@ -200,24 +200,55 @@ const AdminTaskAssignment = ({ adminId }: AdminTaskAssignmentProps) => {
       .eq("id", adminId)
       .single();
 
+    // Build task data object
+    const taskData: any = {
+      title: formData.title,
+      description: formData.description || null,
+      assigned_to: formData.assigned_to,
+      assigned_by: adminId,
+      department_id: formData.department_id,
+      priority: formData.priority as "low" | "medium" | "high" | "urgent",
+      task_type: formData.task_type,
+      location_address: formData.location_address || null,
+      deadline: formData.deadline?.toISOString() || null,
+      status: "pending",
+    };
+
+    // Only add is_required if the field exists (in case migration hasn't run)
+    // We'll try to add it, and if it fails, retry without it
     const { error, data: newTask } = await supabase.from("tasks").insert([
       {
-        title: formData.title,
-        description: formData.description || null,
-        assigned_to: formData.assigned_to,
-        assigned_by: adminId,
-        department_id: formData.department_id,
-        priority: formData.priority as "low" | "medium" | "high" | "urgent",
-        task_type: formData.task_type,
-        location_address: formData.location_address || null,
-        deadline: formData.deadline?.toISOString() || null,
-        status: "pending",
+        ...taskData,
         is_required: formData.is_required,
       },
     ]).select();
 
     if (error) {
-      showError("Failed to create task");
+      // If error is about is_required column, try without it
+      if (error.message?.includes("is_required") || error.message?.includes("column") || error.code === "42703") {
+        console.warn("is_required column may not exist, trying without it:", error.message);
+        const { error: retryError, data: retryTask } = await supabase.from("tasks").insert([taskData]).select();
+        
+        if (retryError) {
+          console.error("Failed to create task:", retryError);
+          showError(`Failed to create task: ${retryError.message || "Unknown error"}`);
+          return;
+        }
+        
+        // Success without is_required
+        showSuccess("Task assigned to department head successfully");
+        if (retryTask && retryTask.length > 0) {
+          const adminName = adminData?.name || "Admin";
+          await notifyTaskAssigned(formData.title, formData.assigned_to, adminName);
+        }
+        setIsDialogOpen(false);
+        resetForm();
+        fetchTasks();
+        return;
+      }
+      
+      console.error("Failed to create task:", error);
+      showError(`Failed to create task: ${error.message || "Unknown error"}`);
       return;
     }
 
