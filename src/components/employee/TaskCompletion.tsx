@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -165,10 +165,22 @@ const TaskCompletion = ({ taskId, onComplete, isOpen, onClose }: TaskCompletionP
   };
 
   // Auto-start camera when dialog opens
-  if (isOpen && !useCamera && !photoPreview) {
-    // Fire and forget, UI will show error if permission fails
-    startCamera();
-  }
+  useEffect(() => {
+    if (isOpen) {
+      // Reset state when dialog opens
+      setPhotoFile(null);
+      setPhotoPreview(null);
+      setUseCamera(false);
+      // Start camera automatically after a small delay to ensure state is reset
+      const timer = setTimeout(() => {
+        startCamera();
+      }, 100);
+      return () => clearTimeout(timer);
+    } else {
+      // Cleanup: stop camera when dialog closes
+      stopCamera();
+    }
+  }, [isOpen]);
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
@@ -178,15 +190,6 @@ const TaskCompletion = ({ taskId, onComplete, isOpen, onClose }: TaskCompletionP
         </DialogHeader>
 
         <div className="space-y-3 sm:space-y-4">
-          {!photoPreview && !useCamera && (
-            <div className="space-y-2 sm:space-y-3">
-              <Button onClick={startCamera} className="w-full" variant="outline" size="sm">
-                <Camera className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-2" />
-                Open Camera
-              </Button>
-            </div>
-          )}
-
           {useCamera && (
             <div className="space-y-2 sm:space-y-3">
               <video

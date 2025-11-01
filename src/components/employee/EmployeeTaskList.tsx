@@ -238,7 +238,7 @@ const EmployeeTaskList = ({ employeeId }: EmployeeTaskListProps) => {
                       )}
                     </>
                   )}
-                  {task.status === "in_progress" && (
+                  {task.status === "in_progress" && task.is_active && (
                     <Button
                       size="sm"
                       onClick={() => setCompletingTaskId(task.id)}
@@ -312,7 +312,7 @@ const EmployeeTaskList = ({ employeeId }: EmployeeTaskListProps) => {
                   )}
                 </>
               )}
-              {task.status === "in_progress" && (
+              {task.status === "in_progress" && task.is_active && (
                 <Button
                   size="sm"
                   onClick={() => setCompletingTaskId(task.id)}
