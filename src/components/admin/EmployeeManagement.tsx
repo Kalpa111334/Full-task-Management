@@ -43,6 +43,48 @@ const EmployeeManagement = () => {
   useEffect(() => {
     fetchEmployees();
     fetchDepartments();
+
+    // Subscribe to real-time updates for employees table
+    const channel = supabase
+      .channel("employees-changes")
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "employees" },
+        (payload) => {
+          // Update specific employee in state for real-time updates
+          if (payload.new && payload.new.id) {
+            setEmployees(prevEmployees =>
+              prevEmployees.map(emp =>
+                emp.id === payload.new.id ? { ...emp, ...payload.new } : emp
+              )
+            );
+          }
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "employees" },
+        () => {
+          fetchEmployees(); // Refetch all for new employees
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "DELETE", schema: "public", table: "employees" },
+        (payload) => {
+          // Remove deleted employee from state
+          if (payload.old && payload.old.id) {
+            setEmployees(prevEmployees =>
+              prevEmployees.filter(emp => emp.id !== payload.old.id)
+            );
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const fetchEmployees = async () => {
@@ -85,12 +127,16 @@ const EmployeeManagement = () => {
         email: formData.email,
         role: formData.role as "admin" | "department_head" | "employee",
         department_id: formData.department_id && formData.department_id !== "none" ? formData.department_id : null,
-        phone: formData.phone || null,
+        // Always include phone field - trim whitespace and use null if empty
+        phone: formData.phone && formData.phone.trim() !== "" ? formData.phone.trim() : null,
       };
 
       if (formData.password) {
         updateData.password = formData.password;
       }
+
+      // Log the update data for debugging
+      console.log("Updating employee with data:", updateData);
 
       const { data: updatedRows, error } = await supabase
         .from("employees")
@@ -99,8 +145,66 @@ const EmployeeManagement = () => {
         .select();
 
       if (error) {
-        showError("Failed to update employee");
+        console.error("Failed to update employee:", error);
+        showError(`Failed to update employee: ${error.message}`);
         return;
+      }
+
+      // Verify the update was successful
+      if (!updatedRows || updatedRows.length === 0) {
+        console.error("Update returned no rows");
+        showError("Failed to update employee - no data returned");
+        return;
+      }
+
+      // Log the updated data for verification
+      console.log("Employee updated successfully:", updatedRows[0]);
+      console.log("Phone number in database:", updatedRows[0].phone);
+
+      // Verify phone was actually saved by fetching again
+      const { data: verifyData, error: verifyError } = await supabase
+        .from("employees")
+        .select("phone")
+        .eq("id", editingEmployee.id)
+        .single();
+
+      if (verifyError) {
+        console.error("Failed to verify phone update:", verifyError);
+      } else {
+        console.log("Verified phone in database:", verifyData?.phone);
+        // If phone doesn't match, update it explicitly
+        if (verifyData?.phone !== updateData.phone) {
+          console.warn("Phone mismatch detected, attempting explicit update");
+          const { error: phoneUpdateError } = await supabase
+            .from("employees")
+            .update({ phone: updateData.phone })
+            .eq("id", editingEmployee.id);
+          
+          if (phoneUpdateError) {
+            console.error("Failed to update phone explicitly:", phoneUpdateError);
+          } else {
+            console.log("Phone updated explicitly");
+            // Refetch to get updated data
+            const { data: refetchData } = await supabase
+              .from("employees")
+              .select("*")
+              .eq("id", editingEmployee.id)
+              .single();
+            
+            if (refetchData) {
+              updatedRows[0] = refetchData;
+            }
+          }
+        }
+      }
+
+      // Update local state immediately for instant UI feedback
+      if (updatedRows && updatedRows.length > 0) {
+        setEmployees(prevEmployees =>
+          prevEmployees.map(emp =>
+            emp.id === editingEmployee.id ? updatedRows[0] : emp
+          )
+        );
       }
 
       showSuccess("Employee updated successfully");

@@ -20,8 +20,10 @@ interface Task {
   started_at: string | null;
   assigned_by: string;
   admin: {
+    id: string;
     name: string;
-  };
+    role: string;
+  } | null;
 }
 
 interface DepartmentHeadAdminTasksProps {
@@ -72,36 +74,77 @@ const DepartmentHeadAdminTasks = ({ departmentHeadId }: DepartmentHeadAdminTasks
   }, [showCameraDialog, selectedTask]);
 
   const fetchTasks = async () => {
-    // First get all admin IDs
-    const { data: admins } = await supabase
-      .from("employees")
-      .select("id")
-      .eq("role", "admin");
+    try {
+      // First get all admin IDs with error handling
+      const { data: admins, error: adminError } = await supabase
+        .from("employees")
+        .select("id")
+        .eq("role", "admin")
+        .eq("is_active", true);
 
-    if (!admins || admins.length === 0) {
+      if (adminError) {
+        console.error("Error fetching admins:", adminError);
+        showError("Failed to fetch admin information");
+        setTasks([]);
+        return;
+      }
+
+      if (!admins || admins.length === 0) {
+        console.warn("No active admins found");
+        setTasks([]);
+        return;
+      }
+
+      const adminIds = admins.map(a => a.id).filter(id => id); // Filter out any null/undefined IDs
+
+      // Ensure adminIds is not empty before querying
+      if (adminIds.length === 0) {
+        console.warn("No valid admin IDs found");
+        setTasks([]);
+        return;
+      }
+
+      // Fetch tasks assigned to this department head by admins
+      // Using a more robust query that also fetches the assigner's role for verification
+      const { data, error } = await supabase
+        .from("tasks")
+        .select(`
+          *,
+          admin:employees!tasks_assigned_by_fkey (id, name, role)
+        `)
+        .eq("assigned_to", departmentHeadId)
+        .in("assigned_by", adminIds)
+        .order("created_at", { ascending: false });
+
+      if (error) {
+        console.error("Error fetching tasks:", error);
+        showError("Failed to fetch tasks");
+        setTasks([]);
+        return;
+      }
+
+      // Filter tasks to ensure they're actually assigned by admins
+      // This handles edge cases and verifies the role in the joined data
+      const adminAssignedTasks = (data || []).filter(task => {
+        // Verify the assigner is in the admin list
+        const isAssignedByAdmin = adminIds.includes(task.assigned_by);
+        
+        // If admin object exists, verify role matches (safety check)
+        // If admin object doesn't exist, trust the adminIds check
+        if (task.admin) {
+          return isAssignedByAdmin && task.admin.role === "admin";
+        }
+        
+        // If admin join failed but assigned_by is in adminIds, still include it
+        return isAssignedByAdmin;
+      });
+
+      setTasks(adminAssignedTasks);
+    } catch (err) {
+      console.error("Unexpected error in fetchTasks:", err);
+      showError("An unexpected error occurred while fetching tasks");
       setTasks([]);
-      return;
     }
-
-    const adminIds = admins.map(a => a.id);
-
-    // Fetch tasks assigned to this department head by admins
-    const { data, error } = await supabase
-      .from("tasks")
-      .select(`
-        *,
-        admin:employees!tasks_assigned_by_fkey (name)
-      `)
-      .eq("assigned_to", departmentHeadId)
-      .in("assigned_by", adminIds)
-      .order("created_at", { ascending: false });
-
-    if (error) {
-      showError("Failed to fetch tasks");
-      return;
-    }
-
-    setTasks(data || []);
   };
 
   const handleStartTask = async (taskId: string) => {
