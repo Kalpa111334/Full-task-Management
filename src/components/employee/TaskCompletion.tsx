@@ -442,17 +442,87 @@ const TaskCompletion = ({ taskId, onComplete, isOpen, onClose }: TaskCompletionP
         throw lastError;
       };
 
-      let uploadRes: any;
+      // Try direct storage upload first (faster, no Edge Function needed)
+      const directUploadToStorage = async (file: File, uploadPath: string): Promise<string> => {
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from('task-photos')
+          .upload(uploadPath, file, {
+            contentType: 'image/jpeg',
+            upsert: true,
+            cacheControl: '3600'
+          });
+
+        if (uploadError) {
+          throw uploadError;
+        }
+
+        const { data: urlData } = supabase.storage
+          .from('task-photos')
+          .getPublicUrl(uploadPath);
+
+        if (!urlData?.publicUrl) {
+          throw new Error('Failed to get public URL after upload');
+        }
+
+        return urlData.publicUrl;
+      };
+
+      let publicUrl: string;
+      
+      // Try direct storage upload first (faster, no Edge Function dependency)
+      // If that fails due to RLS, fallback to Edge Function
+      const uploadPhoto = async (): Promise<string> => {
+        // Create file from compressed data URL for direct upload
+        const base64Data = compressedDataUrl.split(',')[1];
+        const binaryString = atob(base64Data);
+        const bytes = new Uint8Array(binaryString.length);
+        for (let i = 0; i < binaryString.length; i++) {
+          bytes[i] = binaryString.charCodeAt(i);
+        }
+        const blob = new Blob([bytes], { type: 'image/jpeg' });
+        const uploadFile = new File([blob], photoFile.name || 'photo.jpg', { type: 'image/jpeg' });
+        
+        try {
+          // Try direct storage upload first
+          return await directUploadToStorage(uploadFile, path);
+        } catch (directError: any) {
+          const directErrorMsg = directError?.message || String(directError);
+          console.warn('Direct storage upload failed, trying Edge Function:', directErrorMsg);
+          
+          // If it's a policy/permission error, try Edge Function
+          if (directErrorMsg.includes('policy') || directErrorMsg.includes('permission') || 
+              directErrorMsg.includes('unauthorized') || directErrorMsg.includes('Row Level Security')) {
+            // Fallback to Edge Function
+            try {
+              const uploadRes = await uploadWithRetry(3);
+              const edgeUrl = uploadRes?.publicUrl as string;
+              
+              if (!edgeUrl) {
+                throw new Error('Upload succeeded but no photo URL was returned');
+              }
+              
+              return edgeUrl;
+            } catch (edgeError: any) {
+              console.error('Edge Function upload also failed:', edgeError);
+              throw edgeError;
+            }
+          }
+          
+          // For other direct upload errors, throw them
+          throw directError;
+        }
+      };
+      
       try {
-        uploadRes = await uploadWithRetry(3);
-      } catch (uploadError: any) {
-        console.error('Upload error:', uploadError);
-        const errorMsg = uploadError?.message || 'Unknown error';
+        publicUrl = await uploadPhoto();
+      } catch (finalError: any) {
+        console.error('All upload methods failed:', finalError);
+        const errorMsg = finalError?.message || 'Unknown error';
         
         // Check for network/connection errors
         if (errorMsg.includes('Failed to fetch') || errorMsg.includes('network') || 
             errorMsg.includes('NetworkError') || errorMsg.includes('Network request failed') ||
-            uploadError?.name === 'TypeError' || uploadError?.name === 'AbortError') {
+            finalError?.name === 'TypeError' || finalError?.name === 'AbortError') {
           throw new Error('Unable to connect to server. Please check your internet connection and try again.');
         }
         
@@ -461,12 +531,12 @@ const TaskCompletion = ({ taskId, onComplete, isOpen, onClose }: TaskCompletionP
           throw new Error('Server configuration error. Please contact support.');
         }
         
-        throw uploadError;
-      }
-      
-      const publicUrl = uploadRes?.publicUrl as string;
-      if (!publicUrl) {
-        throw new Error('Upload succeeded but no photo URL was returned');
+        // Check for storage policy errors
+        if (errorMsg.includes('policy') || errorMsg.includes('permission') || errorMsg.includes('unauthorized')) {
+          throw new Error('Upload permission denied. Please contact support.');
+        }
+        
+        throw new Error(`Upload failed: ${errorMsg.length > 100 ? 'Please try again' : errorMsg}`);
       }
 
       // Update task with photo and completion time
