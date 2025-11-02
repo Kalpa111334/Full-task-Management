@@ -10,6 +10,8 @@ import { showSuccess, showError } from "@/lib/sweetalert";
 import { CheckCircle, XCircle, Clock, AlertCircle } from "lucide-react";
 import { notifyTaskVerificationApproved, notifyTaskVerificationRejected, notifyTaskApproved, notifyTaskRejected } from "@/lib/notificationService";
 import { TaskReassignmentService } from "@/lib/taskReassignmentService";
+import { SimpleTaskReassignmentService } from "@/lib/simpleTaskReassignment";
+import { notifyAdminVerificationApproved, notifyAdminVerificationRejected } from "@/lib/whatsappService";
 
 interface VerificationRequest {
   id: string;
@@ -145,13 +147,22 @@ const TaskVerification = ({ adminId }: TaskVerificationProps) => {
       
       const adminName = adminData?.name || "Admin";
       
-      // Notify employee
+      // Push notifications
       if (request.task.assigned_to) {
         await notifyTaskApproved(request.task.title, adminName, request.task.assigned_to);
       }
       
-      // Notify department head
       await notifyTaskVerificationApproved(request.task.title, request.task.assigned_to, request.requested_by);
+
+      // WhatsApp notification to employee about admin verification approval
+      if (request.task.assigned_to) {
+        await notifyAdminVerificationApproved(
+          request.task.title,
+          request.task.assigned_to,
+          adminName,
+          taskId
+        );
+      }
     }
     
     fetchRequests();
@@ -180,19 +191,15 @@ const TaskVerification = ({ adminId }: TaskVerificationProps) => {
       return;
     }
 
-    // Automatically reassign task to employee and department head
-    const result = await TaskReassignmentService.reassignRejectedTask(
+    // Automatically reassign only the rejected task to employee
+    const result = await SimpleTaskReassignmentService.reassignRejectedTask(
       selectedRequest.task_id,
       adminId,
       rejectReason
     );
 
     if (result.success) {
-      if (result.deptHeadReassigned) {
-        showSuccess("Request rejected. Task reassigned to employee and department head");
-      } else {
-        showSuccess("Request rejected. Task reassigned to employee");
-      }
+      showSuccess("Request rejected. Task reassigned to employee. Employee notified via WhatsApp.");
     } else {
       // Fallback: just update task status
       const { error: taskError } = await supabase
@@ -216,20 +223,31 @@ const TaskVerification = ({ adminId }: TaskVerificationProps) => {
       
       const adminName = adminData?.name || "Admin";
       
-      // Notify department head who requested verification
+      // Push notifications
       await notifyTaskVerificationRejected(
         selectedRequest.task.title,
         selectedRequest.requested_by,
         adminName
       );
       
-      // Notify employee
       if (selectedRequest.task.assigned_to) {
         await notifyTaskRejected(
           selectedRequest.task.title,
           adminName,
           selectedRequest.task.assigned_to,
           rejectReason
+        );
+      }
+
+      // WhatsApp notifications for admin verification rejection
+      if (selectedRequest.task.assigned_to) {
+        await notifyAdminVerificationRejected(
+          selectedRequest.task.title,
+          selectedRequest.task.assigned_to,
+          selectedRequest.requested_by,
+          adminName,
+          rejectReason,
+          selectedRequest.task_id
         );
       }
     }

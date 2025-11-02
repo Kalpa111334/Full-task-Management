@@ -10,6 +10,7 @@ import { showSuccess, showError } from "@/lib/sweetalert";
 import { CheckCircle, XCircle, Clock, AlertCircle, User, MapPin, Camera } from "lucide-react";
 import { format } from "date-fns";
 import { TaskReassignmentService } from "@/lib/taskReassignmentService";
+import { SimpleTaskReassignmentService } from "@/lib/simpleTaskReassignment";
 
 interface Task {
   id: string;
@@ -219,19 +220,15 @@ const AdminTaskReview = ({ adminId }: AdminTaskReviewProps) => {
       }
     }
 
-    // Automatically reassign to employee and department head
-    const result = await TaskReassignmentService.reassignRejectedTask(
+    // Automatically reassign only the rejected task to department head
+    const result = await SimpleTaskReassignmentService.reassignRejectedTask(
       selectedTask.id,
       adminId,
       rejectReason
     );
 
     if (result.success) {
-      if (result.deptHeadReassigned) {
-        showSuccess("Task rejected and reassigned to both employee and department head");
-      } else {
-        showSuccess("Task rejected and reassigned to employee" + (result.message.includes('department head') ? '' : ' (department head not found)'));
-      }
+      showSuccess("Task rejected and automatically reassigned to department head. Department head notified via WhatsApp.");
     } else {
       showError(result.message || "Task rejected but reassignment failed");
       return;

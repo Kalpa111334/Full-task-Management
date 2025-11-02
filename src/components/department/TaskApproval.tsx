@@ -10,7 +10,8 @@ import { format, differenceInMinutes } from "date-fns";
 import { notifyTaskVerificationRequest, notifyTaskRejected } from "@/lib/notificationService";
 import { TaskAutoReassignmentService } from "@/lib/taskAutoReassignment";
 import { TaskReassignmentService } from "@/lib/taskReassignmentService";
-import { notifyEmployeeTaskApproved, notifyEmployeeTaskRejected } from "@/lib/whatsappService";
+import { SimpleTaskReassignmentService } from "@/lib/simpleTaskReassignment";
+import { notifyEmployeeTaskApproved, notifyEmployeeTaskRejected, notifyEmployeeTaskAssigned } from "@/lib/whatsappService";
 
 interface Task {
   id: string;
@@ -154,69 +155,68 @@ const TaskApproval = ({ departmentId, approvedBy }: TaskApprovalProps) => {
       return;
     }
 
-    // Use automatic reassignment service (reassigns to employee and department head)
-    const result = await TaskReassignmentService.reassignRejectedTask(
+    // Use simple reassignment service (only reassigns the rejected task to employee)
+    const result = await SimpleTaskReassignmentService.reassignRejectedTask(
       taskId,
       approvedBy,
       reason
     );
 
     if (result.success) {
-      if (result.deptHeadReassigned) {
-        showSuccess("Task rejected and automatically reassigned to employee and department head");
-      } else {
-        showSuccess("Task rejected and automatically reassigned to employee");
-      }
+      showSuccess("Task rejected and automatically reassigned to employee. Employee notified via WhatsApp.");
     } else {
-      // Fallback: try the old auto-reassignment service
-      const reassignmentSuccess = await TaskAutoReassignmentService.handleTaskRejection(
-        taskId,
-        approvedBy,
-        reason
-      );
+      // Fallback: manual reassignment
+      const { error } = await supabase
+        .from("tasks")
+        .update({
+          status: "pending",
+          assigned_to: task.assigned_to,
+          completed_at: null,
+          completion_photo_url: null,
+          rejection_reason: reason,
+          rejection_count: (task.rejection_count || 0) + 1,
+          is_active: true
+        })
+        .eq("id", taskId);
 
-      if (reassignmentSuccess) {
-        showSuccess("Task has been automatically reassigned to another employee");
-      } else {
-        // Final fallback: just reassign to employee
-        const { error } = await supabase
-          .from("tasks")
-          .update({
-            status: "pending",
-            completed_at: null,
-            completion_photo_url: null,
-            rejection_reason: reason,
-            rejection_count: (task.rejection_count || 0) + 1
-          })
-          .eq("id", taskId);
+      if (error) {
+        showError("Failed to reject task");
+        return;
+      }
 
-        if (error) {
-          showError("Failed to reject task");
-          return;
-        }
-
-        showSuccess("Task rejected. Employee can resubmit.");
+      showSuccess("Task rejected. Employee can resubmit.");
+      
+      // Notify employee about rejection
+      if (task.assigned_to) {
+        const { data: approverData } = await supabase
+          .from("employees")
+          .select("name")
+          .eq("id", approvedBy)
+          .single();
         
-        // Notify employee about rejection (push notification)
-        if (task.assigned_to) {
-          const { data: approverData } = await supabase
-            .from("employees")
-            .select("name")
-            .eq("id", approvedBy)
-            .single();
-          
-          const approverName = approverData?.name || "Department Head";
-          await notifyTaskRejected(task.title, approverName, task.assigned_to, reason);
+        const approverName = approverData?.name || "Department Head";
+        
+        // Push notification
+        await notifyTaskRejected(task.title, approverName, task.assigned_to, reason);
 
-          // Send WhatsApp notification to employee about task rejection
-          await notifyEmployeeTaskRejected(
-            task.title,
-            task.assigned_to,
-            approverName,
-            reason,
-            taskId
-          );
-        }
+        // WhatsApp notification about rejection
+        await notifyEmployeeTaskRejected(
+          task.title,
+          task.assigned_to,
+          approverName,
+          reason,
+          taskId
+        );
+
+        // WhatsApp notification about reassignment
+        await notifyEmployeeTaskAssigned(
+          task.title,
+          task.assigned_to,
+          approverName,
+          null,
+          task.priority || "medium",
+          taskId
+        );
       }
     }
     

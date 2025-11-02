@@ -454,3 +454,91 @@ export const notifyEmployeeTaskRejected = async (
   console.log('📱 WhatsApp notification result:', result ? '✅ Sent' : '❌ Failed');
   return result;
 };
+
+/**
+ * Notification: Admin verification approved - notify employee
+ */
+export const notifyAdminVerificationApproved = async (
+  taskTitle: string,
+  employeeId: string,
+  adminName: string,
+  taskId: string
+): Promise<boolean> => {
+  console.log('📨 Starting WhatsApp notification for employee - admin verification approved:', employeeId);
+  
+  const phone = await getEmployeePhone(employeeId);
+  if (!phone) {
+    console.warn('⚠️ No phone number found for employee:', employeeId);
+    return false;
+  }
+
+  console.log('✅ Phone found, sending WhatsApp to:', phone);
+
+  const taskUrl = getTaskUrl(taskId);
+
+  let message = `🎉 *Task Verified & Completed*\n\n` +
+    `Congratulations! Your task has been verified and approved by *${adminName}* (Admin).\n\n` +
+    `📋 *Task:* ${taskTitle}\n\n` +
+    `🔗 *Click here to view the task:*\n${taskUrl}\n\n` +
+    `The task has been marked as fully completed. Great work!\n\n` +
+    `_Task Management System_`;
+
+  const result = await sendWhatsAppMessage({
+    number: phone,
+    type: 'text',
+    message,
+  });
+
+  console.log('📱 WhatsApp notification result:', result ? '✅ Sent' : '❌ Failed');
+  return result;
+};
+
+/**
+ * Notification: Admin verification rejected - notify employee and department head
+ */
+export const notifyAdminVerificationRejected = async (
+  taskTitle: string,
+  employeeId: string,
+  departmentHeadId: string,
+  adminName: string,
+  rejectionReason: string,
+  taskId: string
+): Promise<void> => {
+  // Notify employee
+  const employeePhone = await getEmployeePhone(employeeId);
+  if (employeePhone) {
+    const taskUrl = getTaskUrl(taskId);
+    const employeeMessage = `❌ *Task Verification Rejected*\n\n` +
+      `Your task verification has been rejected by *${adminName}* (Admin).\n\n` +
+      `📋 *Task:* ${taskTitle}\n` +
+      `📝 *Reason:* ${rejectionReason}\n\n` +
+      `🔗 *Click here to view the task:*\n${taskUrl}\n\n` +
+      `The task has been sent back for review. Please check the feedback and resubmit.\n\n` +
+      `_Task Management System_`;
+
+    await sendWhatsAppMessage({
+      number: employeePhone,
+      type: 'text',
+      message: employeeMessage,
+    });
+  }
+
+  // Notify department head
+  const deptHeadPhone = await getEmployeePhone(departmentHeadId);
+  if (deptHeadPhone) {
+    const taskUrl = getTaskUrl(taskId);
+    const deptHeadMessage = `⚠️ *Task Verification Rejected*\n\n` +
+      `The task verification you requested has been rejected by *${adminName}* (Admin).\n\n` +
+      `📋 *Task:* ${taskTitle}\n` +
+      `📝 *Reason:* ${rejectionReason}\n\n` +
+      `🔗 *Click here to view the task:*\n${taskUrl}\n\n` +
+      `Please review and take necessary action.\n\n` +
+      `_Task Management System_`;
+
+    await sendWhatsAppMessage({
+      number: deptHeadPhone,
+      type: 'text',
+      message: deptHeadMessage,
+    });
+  }
+};
