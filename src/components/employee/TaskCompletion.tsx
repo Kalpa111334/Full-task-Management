@@ -173,26 +173,54 @@ const TaskCompletion = ({ taskId, onComplete, isOpen, onClose }: TaskCompletionP
 
     try {
       // Get task details for notification
-      const { data: taskData } = await supabase
+      const { data: taskData, error: taskDataError } = await supabase
         .from("tasks")
         .select("title, assigned_by, department_id, assigned_to")
         .eq("id", taskId)
         .single();
+      
+      if (taskDataError) {
+        console.error('Error fetching task data:', taskDataError);
+        throw new Error(`Failed to fetch task details: ${taskDataError.message}`);
+      }
+      
+      if (!taskData) {
+        throw new Error('Task not found');
+      }
 
       // Upload via backend function to bypass storage RLS
       const path = `${taskId}/${Date.now()}-${photoFile.name}`;
       const dataUrl = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
-        reader.onload = () => resolve(reader.result as string);
-        reader.onerror = reject;
+        reader.onload = () => {
+          if (reader.result && typeof reader.result === 'string') {
+            resolve(reader.result);
+          } else {
+            reject(new Error('Failed to read photo file'));
+          }
+        };
+        reader.onerror = () => reject(new Error('Failed to read photo file'));
         reader.readAsDataURL(photoFile);
       });
 
       const { data: uploadRes, error: funcError } = await supabase.functions.invoke('upload-task-photo', {
-        body: { taskId, path, fileType: photoFile.type, dataUrl }
+        body: { taskId, path, fileType: photoFile.type || 'image/jpeg', dataUrl }
       });
-      if (funcError) throw funcError;
+      
+      if (funcError) {
+        console.error('Function error:', funcError);
+        throw new Error(`Upload failed: ${funcError.message || 'Unknown error'}`);
+      }
+      
+      // Check if the response contains an error
+      if (uploadRes && typeof uploadRes === 'object' && 'error' in uploadRes) {
+        throw new Error(`Upload failed: ${uploadRes.error}`);
+      }
+      
       const publicUrl = uploadRes?.publicUrl as string;
+      if (!publicUrl) {
+        throw new Error('Upload succeeded but no photo URL was returned');
+      }
 
       // Update task with photo and completion time
       const { error: updateError } = await supabase
@@ -204,74 +232,91 @@ const TaskCompletion = ({ taskId, onComplete, isOpen, onClose }: TaskCompletionP
         })
         .eq("id", taskId);
 
-      if (updateError) throw updateError;
+      if (updateError) {
+        console.error('Task update error:', updateError);
+        throw new Error(`Failed to update task: ${updateError.message}`);
+      }
 
       showSuccess("Task completed successfully! Waiting for approval.");
       
-      // Send notification to department head and admin
-      if (taskData) {
-        const { data: employeeData } = await supabase
-          .from("employees")
-          .select("name")
-          .eq("id", taskData.assigned_to)
-          .single();
-        
-        const employeeName = employeeData?.name || "Employee";
-        const approverIds: string[] = [];
-        let departmentHeadId: string | null = null;
-        
-        // Add assigned_by (department head or admin)
-        if (taskData.assigned_by) {
-          approverIds.push(taskData.assigned_by);
-        }
-        
-        // Add department head if different
-        if (taskData.department_id) {
-          const { data: deptHead } = await supabase
+      // Send notification to department head and admin (non-blocking)
+      try {
+        if (taskData) {
+          const { data: employeeData } = await supabase
             .from("employees")
-            .select("id")
-            .eq("department_id", taskData.department_id)
-            .eq("role", "department_head")
-            .eq("is_active", true)
+            .select("name")
+            .eq("id", taskData.assigned_to)
             .single();
           
-          if (deptHead) {
-            departmentHeadId = deptHead.id;
-            if (!approverIds.includes(deptHead.id)) {
-              approverIds.push(deptHead.id);
+          const employeeName = employeeData?.name || "Employee";
+          const approverIds: string[] = [];
+          let departmentHeadId: string | null = null;
+          
+          // Add assigned_by (department head or admin)
+          if (taskData.assigned_by) {
+            approverIds.push(taskData.assigned_by);
+          }
+          
+          // Add department head if different
+          if (taskData.department_id) {
+            const { data: deptHead } = await supabase
+              .from("employees")
+              .select("id")
+              .eq("department_id", taskData.department_id)
+              .eq("role", "department_head")
+              .eq("is_active", true)
+              .single();
+            
+            if (deptHead) {
+              departmentHeadId = deptHead.id;
+              if (!approverIds.includes(deptHead.id)) {
+                approverIds.push(deptHead.id);
+              }
             }
           }
-        }
-        
-        // Send push notifications
-        if (approverIds.length > 0) {
-          await notifyTaskCompleted(taskData.title, employeeName, approverIds);
-        }
+          
+          // Send push notifications
+          if (approverIds.length > 0) {
+            await notifyTaskCompleted(taskData.title, employeeName, approverIds).catch(err => {
+              console.warn('Failed to send push notification:', err);
+            });
+          }
 
-        // Send WhatsApp notification to department head about task proof received
-        if (departmentHeadId) {
-          await notifyDeptHeadTaskProofReceived(
-            taskData.title,
-            departmentHeadId,
-            employeeName,
-            taskId
-          );
-        } else if (taskData.assigned_by) {
-          // Fallback: if no department head found, use assigned_by
-          await notifyDeptHeadTaskProofReceived(
-            taskData.title,
-            taskData.assigned_by,
-            employeeName,
-            taskId
-          );
+          // Send WhatsApp notification to department head about task proof received
+          if (departmentHeadId) {
+            await notifyDeptHeadTaskProofReceived(
+              taskData.title,
+              departmentHeadId,
+              employeeName,
+              taskId
+            ).catch(err => {
+              console.warn('Failed to send WhatsApp notification:', err);
+            });
+          } else if (taskData.assigned_by) {
+            // Fallback: if no department head found, use assigned_by
+            await notifyDeptHeadTaskProofReceived(
+              taskData.title,
+              taskData.assigned_by,
+              employeeName,
+              taskId
+            ).catch(err => {
+              console.warn('Failed to send WhatsApp notification:', err);
+            });
+          }
         }
+      } catch (notifError) {
+        // Log but don't fail task completion if notifications fail
+        console.warn('Notification error (non-critical):', notifError);
       }
       
       onComplete();
       onClose();
     } catch (error) {
-      console.error(error);
-      showError("Failed to complete task");
+      console.error('Task completion error:', error);
+      const errorMessage = error instanceof Error 
+        ? error.message 
+        : 'Failed to complete task. Please try again.';
+      showError(errorMessage.length > 100 ? 'Failed to complete task. Please try again.' : errorMessage);
     } finally {
       setIsUploading(false);
     }
