@@ -110,12 +110,15 @@ const TaskCompletion = ({ taskId, onComplete, isOpen, onClose }: TaskCompletionP
       videoRef.current.oncanplay = handleLoadedMetadata;
       
       // Fallback: if events don't fire, check readyState after a delay
-      setTimeout(() => {
-        if (videoRef.current && videoRef.current.readyState >= 2 && cameraLoading) {
+      const timeoutId = setTimeout(() => {
+        if (videoRef.current && videoRef.current.readyState >= 2) {
           setUseCamera(true);
           setCameraLoading(false);
         }
       }, 1000);
+      
+      // Store timeout for cleanup
+      (videoRef.current as any)._cameraTimeout = timeoutId;
       
     } catch (error) {
       console.error("Camera error:", error);
@@ -126,38 +129,107 @@ const TaskCompletion = ({ taskId, onComplete, isOpen, onClose }: TaskCompletionP
   };
 
   const stopCamera = () => {
+    // Clear any pending timeouts
+    if (videoRef.current && (videoRef.current as any)._cameraTimeout) {
+      clearTimeout((videoRef.current as any)._cameraTimeout);
+      (videoRef.current as any)._cameraTimeout = null;
+    }
+    
     if (streamRef.current) {
       streamRef.current.getTracks().forEach(track => track.stop());
       streamRef.current = null;
     }
+    
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+    }
+    
     setUseCamera(false);
+    setCameraLoading(false);
   };
 
   const capturePhoto = () => {
-    if (videoRef.current && videoRef.current.readyState >= 2) {
-      const canvas = document.createElement("canvas");
+    try {
+      // Validate video element exists and is ready
+      if (!videoRef.current) {
+        showError("Camera is not available. Please try again.");
+        return;
+      }
+
       const video = videoRef.current;
+
+      // Check if video is loaded and ready
+      if (video.readyState < 2) {
+        showError("Camera is not ready. Please wait a moment and try again.");
+        return;
+      }
+
+      // Validate video dimensions
+      if (!video.videoWidth || !video.videoHeight || video.videoWidth === 0 || video.videoHeight === 0) {
+        showError("Invalid video dimensions. Please try again.");
+        return;
+      }
+
+      // Create canvas for capturing
+      const canvas = document.createElement("canvas");
       canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
+      
       const ctx = canvas.getContext("2d");
-      if (ctx) {
-        // Flip the image back since we mirrored the video
-        ctx.translate(canvas.width, 0);
-        ctx.scale(-1, 1);
-        ctx.drawImage(video, 0, 0);
-        canvas.toBlob((blob) => {
-          if (blob) {
-            const file = new File([blob], `task-${taskId}-${Date.now()}.jpg`, { type: "image/jpeg" });
-            setPhotoFile(file);
-            setPhotoPreview(URL.createObjectURL(blob));
-            stopCamera();
-          } else {
-            showError("Failed to capture photo");
-          }
-        }, "image/jpeg", 0.9);
+      if (!ctx) {
+        showError("Failed to initialize canvas. Please try again.");
+        return;
       }
-    } else {
-      showError("Camera is not ready. Please wait a moment and try again.");
+
+      // Flip the image back since we mirrored the video for better UX
+      ctx.save();
+      ctx.translate(canvas.width, 0);
+      ctx.scale(-1, 1);
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      ctx.restore();
+
+      // Convert canvas to blob
+      canvas.toBlob(
+        (blob) => {
+          if (!blob) {
+            showError("Failed to capture photo. Please try again.");
+            return;
+          }
+
+          try {
+            // Create file from blob
+            const fileName = `task-${taskId}-${Date.now()}.jpg`;
+            const file = new File([blob], fileName, { 
+              type: "image/jpeg",
+              lastModified: Date.now()
+            });
+
+            // Validate file was created
+            if (!file || file.size === 0) {
+              showError("Failed to create photo file. Please try again.");
+              return;
+            }
+
+            // Create preview URL
+            const previewUrl = URL.createObjectURL(blob);
+            
+            // Set photo file and preview
+            setPhotoFile(file);
+            setPhotoPreview(previewUrl);
+            
+            // Stop camera after successful capture
+            stopCamera();
+          } catch (fileError) {
+            console.error("Error creating file:", fileError);
+            showError("Failed to process captured photo. Please try again.");
+          }
+        },
+        "image/jpeg",
+        0.85 // Slightly lower quality for smaller file size
+      );
+    } catch (error) {
+      console.error("Capture photo error:", error);
+      showError("An error occurred while capturing the photo. Please try again.");
     }
   };
 
@@ -288,37 +360,72 @@ const TaskCompletion = ({ taskId, onComplete, isOpen, onClose }: TaskCompletionP
         throw new Error(`Failed to process image: ${compressionError instanceof Error ? compressionError.message : 'Unknown error'}`);
       }
 
+      // Upload using fetch API directly (more reliable than supabase.functions.invoke)
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY;
+      
+      if (!supabaseUrl || !anonKey) {
+        throw new Error('Supabase configuration missing. Please check your environment variables.');
+      }
+      
+      const functionUrl = `${supabaseUrl}/functions/v1/upload-task-photo`;
+      
       // Retry function with exponential backoff
-      const invokeWithRetry = async (maxRetries: number = 3): Promise<any> => {
+      const uploadWithRetry = async (maxRetries: number = 3): Promise<any> => {
         let lastError: any = null;
         
         for (let attempt = 0; attempt < maxRetries; attempt++) {
           try {
-            // Try using Supabase function invoke first
-            const { data: uploadRes, error: funcError } = await supabase.functions.invoke('upload-task-photo', {
-              body: { 
-                taskId, 
-                path, 
-                fileType: 'image/jpeg', 
-                dataUrl: compressedDataUrl 
-              }
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+            
+            const response = await fetch(functionUrl, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${anonKey}`,
+                'apikey': anonKey
+              },
+              body: JSON.stringify({
+                taskId,
+                path,
+                fileType: 'image/jpeg',
+                dataUrl: compressedDataUrl
+              }),
+              signal: controller.signal
             });
             
-            if (funcError) {
-              throw funcError;
+            clearTimeout(timeoutId);
+            
+            if (!response.ok) {
+              let errorText = '';
+              try {
+                const errorData = await response.json();
+                errorText = errorData.error || errorData.message || `HTTP ${response.status}`;
+              } catch (e) {
+                try {
+                  errorText = await response.text();
+                } catch (e2) {
+                  errorText = `HTTP ${response.status}`;
+                }
+              }
+              throw new Error(`Upload failed: ${errorText}`);
             }
             
-            if (uploadRes && typeof uploadRes === 'object' && 'error' in uploadRes) {
-              throw new Error(uploadRes.error as string);
+            const result = await response.json();
+            
+            // Check if response contains error
+            if (result && typeof result === 'object' && 'error' in result) {
+              throw new Error(result.error as string);
             }
             
-            return uploadRes;
+            return result;
           } catch (error: any) {
             lastError = error;
             const errorMsg = error?.message || String(error);
             
-            // Don't retry on validation errors
-            if (errorMsg.includes('Invalid payload') || errorMsg.includes('Missing')) {
+            // Don't retry on validation errors or aborted requests
+            if (errorMsg.includes('Invalid payload') || errorMsg.includes('Missing') || error.name === 'AbortError') {
               throw error;
             }
             
@@ -335,68 +442,26 @@ const TaskCompletion = ({ taskId, onComplete, isOpen, onClose }: TaskCompletionP
         throw lastError;
       };
 
-      // Try alternative method using fetch API if Supabase invoke fails
-      const uploadViaFetch = async (): Promise<any> => {
-        // Use the same env variable names as the Supabase client
-        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-        const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY;
-        
-        if (!supabaseUrl) {
-          throw new Error('Supabase URL not configured. Please check your environment variables.');
-        }
-        
-        if (!anonKey) {
-          throw new Error('Supabase API key not configured. Please check your environment variables.');
-        }
-        
-        const functionUrl = `${supabaseUrl}/functions/v1/upload-task-photo`;
-        const response = await fetch(functionUrl, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${anonKey}`,
-            'apikey': anonKey
-          },
-          body: JSON.stringify({
-            taskId,
-            path,
-            fileType: 'image/jpeg',
-            dataUrl: compressedDataUrl
-          })
-        });
-        
-        if (!response.ok) {
-          let errorText = '';
-          try {
-            errorText = await response.text();
-          } catch (e) {
-            errorText = `HTTP ${response.status}`;
-          }
-          throw new Error(`Upload failed: ${response.status} ${errorText}`);
-        }
-        
-        return await response.json();
-      };
-
       let uploadRes: any;
       try {
-        // Try with retry logic first
-        uploadRes = await invokeWithRetry(3);
-      } catch (primaryError: any) {
-        console.warn('Primary upload method failed, trying fetch API:', primaryError);
-        try {
-          // Fallback to fetch API
-          uploadRes = await uploadViaFetch();
-        } catch (fetchError: any) {
-          console.error('Both upload methods failed:', { primaryError, fetchError });
-          const errorMsg = fetchError?.message || primaryError?.message || 'Unknown error';
-          
-          if (errorMsg.includes('Failed to send') || errorMsg.includes('network') || errorMsg.includes('fetch') || errorMsg.includes('Failed to fetch')) {
-            throw new Error('Unable to connect to server. Please check your internet connection and try again.');
-          }
-          
-          throw new Error(`Upload failed: ${errorMsg}`);
+        uploadRes = await uploadWithRetry(3);
+      } catch (uploadError: any) {
+        console.error('Upload error:', uploadError);
+        const errorMsg = uploadError?.message || 'Unknown error';
+        
+        // Check for network/connection errors
+        if (errorMsg.includes('Failed to fetch') || errorMsg.includes('network') || 
+            errorMsg.includes('NetworkError') || errorMsg.includes('Network request failed') ||
+            uploadError?.name === 'TypeError' || uploadError?.name === 'AbortError') {
+          throw new Error('Unable to connect to server. Please check your internet connection and try again.');
         }
+        
+        // Check for configuration errors
+        if (errorMsg.includes('configuration') || errorMsg.includes('missing') || errorMsg.includes('not configured')) {
+          throw new Error('Server configuration error. Please contact support.');
+        }
+        
+        throw uploadError;
       }
       
       const publicUrl = uploadRes?.publicUrl as string;
