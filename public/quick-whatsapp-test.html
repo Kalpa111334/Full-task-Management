@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Quick WhatsApp Test</title>
+    <style>
+        body { font-family: Arial; padding: 20px; background: #f0f0f0; }
+        .test { background: white; padding: 20px; margin: 10px 0; border-radius: 8px; }
+        button { background: #25D366; color: white; border: none; padding: 12px 24px; 
+                 border-radius: 5px; cursor: pointer; font-size: 16px; margin: 5px; }
+        button:hover { background: #128C7E; }
+        .result { margin-top: 10px; padding: 10px; border-radius: 5px; font-family: monospace; 
+                  white-space: pre-wrap; }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+        .info { background: #d1ecf1; color: #0c5460; }
+    </style>
+</head>
+<body>
+    <h1>🚀 Quick WhatsApp Test</h1>
+    
+    <div class="test">
+        <h2>Test Direct API Call</h2>
+        <p>Phone: <strong>0755682782</strong> → Formatted: <strong>94755682782</strong></p>
+        <button onclick="testWhatsApp()">Send Test WhatsApp</button>
+        <div id="result"></div>
+    </div>
+
+    <script>
+        function showResult(msg, type = 'info') {
+            document.getElementById('result').className = `result ${type}`;
+            document.getElementById('result').textContent = msg;
+        }
+
+        async function testWhatsApp() {
+            showResult('⏳ Sending WhatsApp...', 'info');
+            
+            try {
+                const phone = '94755682782';
+                const message = 'Test WhatsApp from Task Management System - ' + new Date().toLocaleString();
+                const url = `http://api.geekhirusha.com/emptaskmanagement.php?number=${phone}&type=text&message=${encodeURIComponent(message)}`;
+                
+                console.log('📱 Sending to:', phone);
+                console.log('🌐 URL:', url);
+                
+                // Using no-cors mode
+                await fetch(url, { method: 'GET', mode: 'no-cors' });
+                
+                showResult(`✅ WhatsApp request sent!\n\nPhone: ${phone}\nMessage: ${message}\n\nCheck WhatsApp at 0755682782`, 'success');
+                
+            } catch (error) {
+                showResult(`❌ Error: ${error.message}`, 'error');
+                console.error(error);
+            }
+        }
+
+        // Auto-test on load
+        console.log('🚀 Quick Test Page Loaded');
+        console.log('📱 Test phone: 0755682782');
+        console.log('📱 Formatted: 94755682782');
+    </script>
+</body>
+</html>
