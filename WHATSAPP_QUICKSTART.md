@@ -22,10 +22,10 @@ WHERE email = 'your@email.com';
 ### Test WhatsApp API
 ```bash
 # Open in browser:
-http://api.geekhirusha.com/emptaskmanagement.php?number=94771234567&type=text&message=Hello
+https://api.geekhirusha.com/emptaskmanagement.php?number=94771234567&type=text&message=Hello
 
 # PowerShell:
-Invoke-WebRequest -Uri "http://api.geekhirusha.com/emptaskmanagement.php?number=94771234567&type=text&message=Test"
+Invoke-WebRequest -Uri "https://api.geekhirusha.com/emptaskmanagement.php?number=94771234567&type=text&message=Test"
 ```
 
 ### Check Who Has Phone Numbers
@@ -81,7 +81,7 @@ UPDATE employees SET phone = '0771234567' WHERE id = 'employee-id-here';
 ### API Not Working?
 ```bash
 # Test directly:
-curl "http://api.geekhirusha.com/emptaskmanagement.php?number=94771234567&type=text&message=Test"
+curl "https://api.geekhirusha.com/emptaskmanagement.php?number=94771234567&type=text&message=Test"
 ```
 
 ### Invalid Format Warning?
@@ -181,6 +181,6 @@ Before asking for help:
 ---
 
 **Quick Links:**
-- API: `http://api.geekhirusha.com/emptaskmanagement.php`
+- API: `https://api.geekhirusha.com/emptaskmanagement.php`
 - Service: `src/lib/whatsappService.ts`
 - Migration: `supabase/migrations/20250101000000_add_whatsapp_phone_support.sql`

@@ -191,7 +191,7 @@
 │  sendWhatsAppMessage(params)                                     │
 │  ┌────────────────────────────────────────────────────┐         │
 │  │ Build URL:                                          │         │
-│  │ http://api.geekhirusha.com/emptaskmanagement.php   │         │
+│  │ https://api.geekhirusha.com/emptaskmanagement.php   │         │
 │  │   ?number=94771234567                               │         │
 │  │   &type=text                                        │         │
 │  │   &message=URL_ENCODED_MESSAGE                      │         │

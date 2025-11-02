@@ -93,18 +93,35 @@ const formatPhoneNumber = (phone: string | null | undefined): string | null => {
  */
 const getEmployeePhone = async (employeeId: string): Promise<string | null> => {
   try {
+    console.log('🔍 Fetching phone for employee:', employeeId);
+    
     const { data, error } = await supabase
       .from('employees')
       .select('phone')
       .eq('id', employeeId)
       .single();
 
-    if (error || !data) {
+    if (error) {
       console.error('❌ Failed to fetch employee phone:', error);
       return null;
     }
 
-    return formatPhoneNumber(data.phone);
+    if (!data) {
+      console.error('❌ No employee data found for ID:', employeeId);
+      return null;
+    }
+
+    console.log('📞 Raw phone from database:', data.phone);
+
+    if (!data.phone) {
+      console.warn('⚠️ Phone field is empty for employee:', employeeId);
+      return null;
+    }
+
+    const formatted = formatPhoneNumber(data.phone);
+    console.log('📱 Formatted phone:', formatted);
+    
+    return formatted;
   } catch (error) {
     console.error('❌ Error fetching employee phone:', error);
     return null;
@@ -119,11 +136,16 @@ export const notifyDeptHeadTaskAssigned = async (
   deptHeadId: string,
   assignedByName: string
 ): Promise<boolean> => {
+  console.log('📨 Starting WhatsApp notification for dept head:', deptHeadId);
+  
   const phone = await getEmployeePhone(deptHeadId);
   if (!phone) {
     console.warn('⚠️ No phone number found for department head:', deptHeadId);
+    console.warn('⚠️ Make sure phone number is added to database');
     return false;
   }
+
+  console.log('✅ Phone found, sending WhatsApp to:', phone);
 
   const message = `🎯 *New Task Assigned*\n\n` +
     `Hello! You have been assigned a new task by *${assignedByName}*.\n\n` +
@@ -131,11 +153,14 @@ export const notifyDeptHeadTaskAssigned = async (
     `Please check your dashboard for details and assign it to your team members.\n\n` +
     `_Task Management System_`;
 
-  return sendWhatsAppMessage({
+  const result = await sendWhatsAppMessage({
     number: phone,
     type: 'text',
     message,
   });
+
+  console.log('📱 WhatsApp notification result:', result ? '✅ Sent' : '❌ Failed');
+  return result;
 };
 
 /**
@@ -148,11 +173,16 @@ export const notifyEmployeeTaskAssigned = async (
   deadline?: string | null,
   priority?: string
 ): Promise<boolean> => {
+  console.log('📨 Starting WhatsApp notification for employee:', employeeId);
+  
   const phone = await getEmployeePhone(employeeId);
   if (!phone) {
     console.warn('⚠️ No phone number found for employee:', employeeId);
+    console.warn('⚠️ Make sure phone number is added to database');
     return false;
   }
+
+  console.log('✅ Phone found, sending WhatsApp to:', phone);
 
   let message = `✅ *Task Assigned*\n\n` +
     `Hello! You have been assigned a new task by *${assignedByName}*.\n\n` +
@@ -187,11 +217,14 @@ export const notifyEmployeeTaskAssigned = async (
   message += `\nPlease check your dashboard to view details and start working on the task.\n\n` +
     `_Task Management System_`;
 
-  return sendWhatsAppMessage({
+  const result = await sendWhatsAppMessage({
     number: phone,
     type: 'text',
     message,
   });
+
+  console.log('📱 WhatsApp notification result:', result ? '✅ Sent' : '❌ Failed');
+  return result;
 };
 
 /**

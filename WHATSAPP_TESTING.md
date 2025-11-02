@@ -35,7 +35,7 @@ WHERE phone IS NOT NULL AND phone != '';
 ### Test Text Message
 Open this URL in your browser (replace with your phone number):
 ```
-http://api.geekhirusha.com/emptaskmanagement.php?number=94771234567&type=text&message=Test%20Message%20from%20Task%20Management%20System
+https://api.geekhirusha.com/emptaskmanagement.php?number=94771234567&type=text&message=Test%20Message%20from%20Task%20Management%20System
 ```
 
 ### Test with PowerShell
@@ -43,7 +43,7 @@ http://api.geekhirusha.com/emptaskmanagement.php?number=94771234567&type=text&me
 # Test WhatsApp API
 $number = "94771234567"
 $message = "Hello from Task Management System"
-$url = "http://api.geekhirusha.com/emptaskmanagement.php?number=$number&type=text&message=$message"
+$url = "https://api.geekhirusha.com/emptaskmanagement.php?number=$number&type=text&message=$message"
 Invoke-WebRequest -Uri $url
 ```
 

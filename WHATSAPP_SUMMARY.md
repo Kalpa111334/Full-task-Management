@@ -80,7 +80,7 @@ notifyBulkEmployeeTasksAssigned(taskTitle, employeeIds, assignerName, taskCount)
 - ✅ Graceful error handling (logs warnings, doesn't break flow)
 
 ### API Integration
-- **Endpoint:** `http://api.geekhirusha.com/emptaskmanagement.php`
+- **Endpoint:** `https://api.geekhirusha.com/emptaskmanagement.php`
 - **Method:** GET request
 - **Parameters:** number, type, message
 - **Error Handling:** Non-blocking (logs errors but continues)
@@ -189,7 +189,7 @@ Before deploying to production:
 |---------|----------|
 | No WhatsApp received | Check phone number in database (`SELECT phone FROM employees WHERE id = '...'`) |
 | Console shows warning | Employee missing phone number - update database |
-| API error | Test API directly: `http://api.geekhirusha.com/emptaskmanagement.php?number=94771234567&type=text&message=Test` |
+| API error | Test API directly: `https://api.geekhirusha.com/emptaskmanagement.php?number=94771234567&type=text&message=Test` |
 | Invalid format | Ensure phone is 9-10 digits (removes spaces/dashes automatically) |
 
 ---
@@ -280,7 +280,7 @@ Before deploying to production:
 ### Test WhatsApp API
 ```bash
 # PowerShell
-Invoke-WebRequest -Uri "http://api.geekhirusha.com/emptaskmanagement.php?number=94771234567&type=text&message=Test"
+Invoke-WebRequest -Uri "https://api.geekhirusha.com/emptaskmanagement.php?number=94771234567&type=text&message=Test"
 ```
 
 ### Update Phone Number

@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WhatsApp Service Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #25D366;
+            text-align: center;
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        button {
+            background: #25D366;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 5px;
+        }
+        button:hover {
+            background: #128C7E;
+        }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .result {
+            margin-top: 15px;
+            padding: 15px;
+            border-radius: 5px;
+            font-family: monospace;
+            white-space: pre-wrap;
+        }
+        .success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        input {
+            width: 100%;
+            padding: 10px;
+            margin: 10px 0;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+        label {
+            font-weight: bold;
+            display: block;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📱 WhatsApp Service Test</h1>
+        
+        <!-- Test 1: Direct API Test -->
+        <div class="test-section">
+            <h2>Test 1: Direct WhatsApp API</h2>
+            <p>Tests the WhatsApp API directly (will fail on Vercel due to CORS)</p>
+            <label>Phone Number:</label>
+            <input type="text" id="directPhone" value="0755682782" />
+            <label>Message:</label>
+            <input type="text" id="directMessage" value="Test from Direct API - Task Management System" />
+            <button onclick="testDirectAPI()">Test Direct API</button>
+            <div id="directResult"></div>
+        </div>
+
+        <!-- Test 2: Serverless Function Test -->
+        <div class="test-section">
+            <h2>Test 2: Serverless Function</h2>
+            <p>Tests via /api/send-whatsapp (works on Vercel)</p>
+            <label>Phone Number:</label>
+            <input type="text" id="serverlessPhone" value="0755682782" />
+            <label>Message:</label>
+            <input type="text" id="serverlessMessage" value="Test from Serverless Function - Task Management System" />
+            <button onclick="testServerlessAPI()">Test Serverless</button>
+            <div id="serverlessResult"></div>
+        </div>
+
+        <!-- Test 3: Format Phone Number -->
+        <div class="test-section">
+            <h2>Test 3: Phone Number Formatting</h2>
+            <label>Phone Number:</label>
+            <input type="text" id="formatPhone" value="0755682782" />
+            <button onclick="testFormatPhone()">Format Phone</button>
+            <div id="formatResult"></div>
+        </div>
+    </div>
+
+    <script>
+        function showResult(elementId, message, type = 'info') {
+            const element = document.getElementById(elementId);
+            element.className = `result ${type}`;
+            element.textContent = message;
+        }
+
+        function formatPhoneNumber(phone) {
+            // Remove all non-digit characters
+            let cleaned = phone.replace(/\D/g, '');
+            
+            // If starts with 0, replace with 94
+            if (cleaned.startsWith('0')) {
+                cleaned = '94' + cleaned.substring(1);
+            }
+            
+            // If doesn't start with 94, add it
+            if (!cleaned.startsWith('94')) {
+                cleaned = '94' + cleaned;
+            }
+            
+            return cleaned;
+        }
+
+        async function testDirectAPI() {
+            const phone = document.getElementById('directPhone').value;
+            const message = document.getElementById('directMessage').value;
+            const resultId = 'directResult';
+
+            showResult(resultId, '📡 Sending request to WhatsApp API...', 'info');
+
+            try {
+                const formattedPhone = formatPhoneNumber(phone);
+                const url = `https://api.geekhirusha.com/emptaskmanagement.php?number=${formattedPhone}&type=text&message=${encodeURIComponent(message)}`;
+                
+                console.log('Direct API URL:', url);
+                
+                const response = await fetch(url, { method: 'GET' });
+                const data = await response.text();
+
+                if (response.ok) {
+                    showResult(resultId, `✅ Success!\n\nFormatted Phone: ${formattedPhone}\nResponse: ${data}`, 'success');
+                } else {
+                    showResult(resultId, `❌ Error: ${response.status}\n${data}`, 'error');
+                }
+            } catch (error) {
+                showResult(resultId, `❌ Error: ${error.message}\n\nNote: This will fail on Vercel due to CORS. Use serverless function instead.`, 'error');
+            }
+        }
+
+        async function testServerlessAPI() {
+            const phone = document.getElementById('serverlessPhone').value;
+            const message = document.getElementById('serverlessMessage').value;
+            const resultId = 'serverlessResult';
+
+            showResult(resultId, '📡 Sending request to serverless function...', 'info');
+
+            try {
+                const response = await fetch('/api/send-whatsapp', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        number: phone,
+                        type: 'text',
+                        message: message
+                    })
+                });
+
+                const data = await response.json();
+
+                if (response.ok && data.success) {
+                    showResult(resultId, `✅ Success!\n\nResponse: ${JSON.stringify(data, null, 2)}`, 'success');
+                } else {
+                    showResult(resultId, `❌ Error: ${data.error || 'Unknown error'}\n\n${JSON.stringify(data, null, 2)}`, 'error');
+                }
+            } catch (error) {
+                showResult(resultId, `❌ Error: ${error.message}\n\nMake sure the serverless function is deployed.`, 'error');
+            }
+        }
+
+        function testFormatPhone() {
+            const phone = document.getElementById('formatPhone').value;
+            const resultId = 'formatResult';
+
+            try {
+                const formatted = formatPhoneNumber(phone);
+                showResult(resultId, `Original: ${phone}\nFormatted: ${formatted}\n\nLength: ${formatted.length} characters\nValid: ${formatted.length === 11 ? '✅ Yes' : '❌ No (should be 11)'}`, 'info');
+            } catch (error) {
+                showResult(resultId, `❌ Error: ${error.message}`, 'error');
+            }
+        }
+
+        // Auto-test on page load
+        window.addEventListener('load', () => {
+            console.log('📱 WhatsApp Test Page Loaded');
+            console.log('Testing phone number formatting...');
+            testFormatPhone();
+        });
+    </script>
+</body>
+</html>

@@ -78,7 +78,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       params.append('mediaUrl', mediaUrl);
     }
 
-    const apiUrl = `http://api.geekhirusha.com/emptaskmanagement.php?${params.toString()}`;
+    const apiUrl = `https://api.geekhirusha.com/emptaskmanagement.php?${params.toString()}`;
 
     console.log('📱 [Server] Sending WhatsApp to:', formattedNumber);
 

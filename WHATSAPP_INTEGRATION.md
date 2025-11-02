@@ -31,7 +31,7 @@ When assigning tasks to multiple employees:
 ## 🔧 API Configuration
 
 ### WhatsApp API Details
-- **Base URL**: `http://api.geekhirusha.com/emptaskmanagement.php`
+- **Base URL**: `https://api.geekhirusha.com/emptaskmanagement.php`
 - **Method**: GET
 - **Required Parameters**:
   - `number`: Recipient's phone number (format: 94XXXXXXXXX)
@@ -225,7 +225,7 @@ ALTER TABLE employees ADD COLUMN IF NOT EXISTS phone TEXT;
 
 ### Test WhatsApp API Directly
 ```bash
-curl "http://api.geekhirusha.com/emptaskmanagement.php?number=94771234567&type=text&message=Hello%20Test"
+curl "https://api.geekhirusha.com/emptaskmanagement.php?number=94771234567&type=text&message=Hello%20Test"
 ```
 
 ### Test via Application

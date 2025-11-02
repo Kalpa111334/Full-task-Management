@@ -170,10 +170,10 @@ Look for these log messages:
 ### Test API Directly
 ```bash
 # Browser or curl
-http://api.geekhirusha.com/emptaskmanagement.php?number=94771234567&type=text&message=Test
+https://api.geekhirusha.com/emptaskmanagement.php?number=94771234567&type=text&message=Test
 
 # PowerShell
-Invoke-WebRequest -Uri "http://api.geekhirusha.com/emptaskmanagement.php?number=94771234567&type=text&message=Test"
+Invoke-WebRequest -Uri "https://api.geekhirusha.com/emptaskmanagement.php?number=94771234567&type=text&message=Test"
 ```
 
 ---
@@ -233,7 +233,7 @@ Before going live:
 
 ## 📞 API Details
 
-- **Base URL**: `http://api.geekhirusha.com/emptaskmanagement.php`
+- **Base URL**: `https://api.geekhirusha.com/emptaskmanagement.php`
 - **Method**: GET
 - **Parameters**:
   - `number` (required): Phone number (94XXXXXXXXX)
