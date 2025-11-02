@@ -50,12 +50,12 @@ const TaskCompletion = ({ taskId, onComplete, isOpen, onClose }: TaskCompletionP
       // Try environment camera first (back camera on mobile)
       try {
         stream = await navigator.mediaDevices.getUserMedia({ 
-          video: { 
-            facingMode: "environment",
-            width: { ideal: 1280 },
-            height: { ideal: 720 }
-          } 
-        });
+        video: { 
+          facingMode: "environment",
+          width: { ideal: 1280 },
+          height: { ideal: 720 }
+        } 
+      });
       } catch (envError) {
         lastError = envError;
         console.warn("Environment camera not available, trying user-facing:", envError);
@@ -95,14 +95,14 @@ const TaskCompletion = ({ taskId, onComplete, isOpen, onClose }: TaskCompletionP
         return;
       }
 
-      videoRef.current.srcObject = stream;
-      streamRef.current = stream;
+        videoRef.current.srcObject = stream;
+        streamRef.current = stream;
       
-      // Wait for video to be ready
+        // Wait for video to be ready
       const handleLoadedMetadata = () => {
-        setUseCamera(true);
-        setCameraLoading(false);
-      };
+          setUseCamera(true);
+          setCameraLoading(false);
+        };
       
       videoRef.current.onloadedmetadata = handleLoadedMetadata;
       
@@ -113,8 +113,8 @@ const TaskCompletion = ({ taskId, onComplete, isOpen, onClose }: TaskCompletionP
       const timeoutId = setTimeout(() => {
         if (videoRef.current && videoRef.current.readyState >= 2) {
           setUseCamera(true);
-          setCameraLoading(false);
-        }
+        setCameraLoading(false);
+      }
       }, 1000);
       
       // Store timeout for cleanup
@@ -354,7 +354,7 @@ const TaskCompletion = ({ taskId, onComplete, isOpen, onClose }: TaskCompletionP
         .select("title, assigned_by, department_id, assigned_to")
         .eq("id", taskId)
         .single();
-      
+
       if (taskDataError) {
         console.error('Error fetching task data:', taskDataError);
         throw new Error(`Failed to fetch task details: ${taskDataError.message}`);
@@ -544,42 +544,42 @@ const TaskCompletion = ({ taskId, onComplete, isOpen, onClose }: TaskCompletionP
       
       // Send notification to department head and admin (non-blocking)
       try {
-        if (taskData) {
-          const { data: employeeData } = await supabase
+      if (taskData) {
+        const { data: employeeData } = await supabase
+          .from("employees")
+          .select("name")
+          .eq("id", taskData.assigned_to)
+          .single();
+        
+        const employeeName = employeeData?.name || "Employee";
+        const approverIds: string[] = [];
+          let departmentHeadId: string | null = null;
+        
+        // Add assigned_by (department head or admin)
+        if (taskData.assigned_by) {
+          approverIds.push(taskData.assigned_by);
+        }
+        
+        // Add department head if different
+        if (taskData.department_id) {
+          const { data: deptHead } = await supabase
             .from("employees")
-            .select("name")
-            .eq("id", taskData.assigned_to)
+            .select("id")
+            .eq("department_id", taskData.department_id)
+            .eq("role", "department_head")
+            .eq("is_active", true)
             .single();
           
-          const employeeName = employeeData?.name || "Employee";
-          const approverIds: string[] = [];
-          let departmentHeadId: string | null = null;
-          
-          // Add assigned_by (department head or admin)
-          if (taskData.assigned_by) {
-            approverIds.push(taskData.assigned_by);
-          }
-          
-          // Add department head if different
-          if (taskData.department_id) {
-            const { data: deptHead } = await supabase
-              .from("employees")
-              .select("id")
-              .eq("department_id", taskData.department_id)
-              .eq("role", "department_head")
-              .eq("is_active", true)
-              .single();
-            
             if (deptHead) {
               departmentHeadId = deptHead.id;
               if (!approverIds.includes(deptHead.id)) {
-                approverIds.push(deptHead.id);
+            approverIds.push(deptHead.id);
               }
-            }
           }
-          
+        }
+        
           // Send push notifications
-          if (approverIds.length > 0) {
+        if (approverIds.length > 0) {
             await notifyTaskCompleted(taskData.title, employeeName, approverIds).catch(err => {
               console.warn('Failed to send push notification:', err);
             });
@@ -690,24 +690,24 @@ const TaskCompletion = ({ taskId, onComplete, isOpen, onClose }: TaskCompletionP
           
           {/* Always render video element so ref is available, hide when not in use */}
           <div className={`space-y-2 sm:space-y-3 ${useCamera && !cameraLoading ? '' : 'hidden'}`}>
-            <video
-              ref={videoRef}
-              autoPlay
-              playsInline
-              muted
-              className="w-full rounded-lg bg-black max-h-64 sm:max-h-96"
-            />
-            <div className="flex flex-col sm:flex-row gap-2">
-              <Button onClick={capturePhoto} className="flex-1 bg-success hover:bg-success/90" size="sm">
-                <Camera className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-2" />
-                Capture Photo
-              </Button>
-              <Button onClick={stopCamera} variant="outline" size="sm">
-                <X className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-2" />
-                Cancel
-              </Button>
+              <video
+                ref={videoRef}
+                autoPlay
+                playsInline
+                muted
+                className="w-full rounded-lg bg-black max-h-64 sm:max-h-96"
+              />
+              <div className="flex flex-col sm:flex-row gap-2">
+                <Button onClick={capturePhoto} className="flex-1 bg-success hover:bg-success/90" size="sm">
+                  <Camera className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-2" />
+                  Capture Photo
+                </Button>
+                <Button onClick={stopCamera} variant="outline" size="sm">
+                  <X className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-2" />
+                  Cancel
+                </Button>
+              </div>
             </div>
-          </div>
 
           {!useCamera && !cameraLoading && !photoPreview && (
             <div className="flex items-center justify-center py-8">

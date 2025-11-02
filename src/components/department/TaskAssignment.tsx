@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { showSuccess, showError, showConfirm } from "@/lib/sweetalert";
-import { Plus, MapPin, Clock, User, AlertCircle, Check, ChevronsUpDown, Power, PowerOff, Trash2, Play } from "lucide-react";
+import { Plus, MapPin, Clock, User, AlertCircle, Check, ChevronsUpDown, Power, PowerOff, Trash2, Play, Paperclip, X, Repeat } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { format } from "date-fns";
 import { Calendar } from "@/components/ui/calendar";
@@ -17,6 +17,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { CalendarIcon } from "lucide-react";
 import { cn, sortTasksByStatus, isTaskNewToday } from "@/lib/utils";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { Checkbox } from "@/components/ui/checkbox";
 import { notifyTaskAssigned, notifyTaskDeactivated, notifyTaskActivated, notifyTaskDeleted, notifyTaskStarted } from "@/lib/notificationService";
 import { notifyEmployeeTaskAssigned } from "@/lib/whatsappService";
 
@@ -60,6 +61,11 @@ const TaskAssignment = ({ departmentId, assignedBy }: TaskAssignmentProps) => {
     task_type: "normal",
     location_address: "",
     deadline: undefined as Date | undefined,
+    attachment: null as File | null,
+    is_recurring: false,
+    recurrence_type: "daily" as "daily" | "weekly" | "monthly" | null,
+    recurrence_day: undefined as number | undefined,
+    recurrence_end_date: undefined as Date | undefined,
   });
 
   useEffect(() => {
@@ -264,12 +270,75 @@ const TaskAssignment = ({ departmentId, assignedBy }: TaskAssignmentProps) => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    // Validate recurring task settings
+    if (formData.is_recurring) {
+      if (!formData.recurrence_type) {
+        showError("Please select a recurrence frequency");
+        return;
+      }
+      if ((formData.recurrence_type === "weekly" || formData.recurrence_type === "monthly") && 
+          formData.recurrence_day === undefined) {
+        showError(`Please select a ${formData.recurrence_type === "weekly" ? "day of week" : "day of month"} for recurring task`);
+        return;
+      }
+    }
+
     // Get assigner name for notification
     const { data: assignerData } = await supabase
       .from("employees")
       .select("name")
       .eq("id", assignedBy)
       .single();
+
+    // Upload attachment if present
+    let attachmentUrl: string | null = null;
+    if (formData.attachment) {
+      try {
+        const fileExt = formData.attachment.name.split('.').pop();
+        const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+        const filePath = `task-attachments/${fileName}`;
+
+        const { error: uploadError } = await supabase.storage
+          .from('task-attachments')
+          .upload(filePath, formData.attachment, {
+            upsert: false,
+            cacheControl: '3600',
+          });
+
+        if (uploadError) {
+          // If bucket doesn't exist, create it and try again (for first time)
+          if (uploadError.message.includes('Bucket not found')) {
+            // Try creating bucket (this will fail if no permissions, but we try)
+            await supabase.storage.createBucket('task-attachments', { public: true });
+            // Retry upload
+            const { error: retryError } = await supabase.storage
+              .from('task-attachments')
+              .upload(filePath, formData.attachment);
+            
+            if (retryError) {
+              console.error('Attachment upload failed:', retryError);
+              showError('Failed to upload attachment. Please try again.');
+              return;
+            }
+          } else {
+            console.error('Attachment upload failed:', uploadError);
+            showError('Failed to upload attachment. Please try again.');
+            return;
+          }
+        }
+
+        // Get public URL
+        const { data: urlData } = supabase.storage
+          .from('task-attachments')
+          .getPublicUrl(filePath);
+        
+        attachmentUrl = urlData?.publicUrl || null;
+      } catch (attachError) {
+        console.error('Attachment error:', attachError);
+        showError('Failed to process attachment. Please try again.');
+        return;
+      }
+    }
 
     const { error, data: newTask } = await supabase.from("tasks").insert([
       {
@@ -283,6 +352,10 @@ const TaskAssignment = ({ departmentId, assignedBy }: TaskAssignmentProps) => {
         location_address: formData.location_address || null,
         deadline: formData.deadline?.toISOString() || null,
         status: "pending",
+        is_recurring: formData.is_recurring || false,
+        recurrence_type: formData.is_recurring && formData.recurrence_type ? formData.recurrence_type : null,
+        recurrence_day: formData.is_recurring && formData.recurrence_day !== undefined ? formData.recurrence_day : null,
+        recurrence_end_date: formData.is_recurring && formData.recurrence_end_date ? formData.recurrence_end_date.toISOString() : null,
       },
     ]).select();
 
@@ -292,6 +365,19 @@ const TaskAssignment = ({ departmentId, assignedBy }: TaskAssignmentProps) => {
     }
 
     showSuccess("Task created successfully");
+
+    // Create attachment record if attachment was uploaded
+    if (newTask && newTask.length > 0 && attachmentUrl && formData.attachment) {
+      const taskId = newTask[0]?.id;
+      await supabase.from("task_attachments").insert([
+        {
+          task_id: taskId,
+          file_name: formData.attachment.name,
+          file_url: attachmentUrl,
+          uploaded_by: assignedBy,
+        },
+      ]);
+    }
     
     // Send notifications if employee is assigned
     if (formData.assigned_to && formData.assigned_to !== 'unassigned' && newTask && newTask.length > 0) {
@@ -324,6 +410,11 @@ const TaskAssignment = ({ departmentId, assignedBy }: TaskAssignmentProps) => {
       task_type: "normal",
       location_address: "",
       deadline: undefined,
+      attachment: null,
+      is_recurring: false,
+      recurrence_type: "daily",
+      recurrence_day: undefined,
+      recurrence_end_date: undefined,
     });
   };
 
@@ -526,6 +617,149 @@ const TaskAssignment = ({ departmentId, assignedBy }: TaskAssignmentProps) => {
                 </div>
               </div>
 
+              {/* Attachment Upload */}
+              <div className="space-y-2">
+                <Label htmlFor="attachment">Attachment (Optional)</Label>
+                <div className="flex items-center gap-2">
+                  <Input
+                    id="attachment"
+                    type="file"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        if (file.size > 10 * 1024 * 1024) { // 10MB limit
+                          showError("File size must be less than 10MB");
+                          return;
+                        }
+                        setFormData({ ...formData, attachment: file });
+                      }
+                    }}
+                    className="flex-1"
+                  />
+                  {formData.attachment && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setFormData({ ...formData, attachment: null })}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  )}
+                </div>
+                {formData.attachment && (
+                  <p className="text-xs text-muted-foreground flex items-center gap-1">
+                    <Paperclip className="h-3 w-3" />
+                    {formData.attachment.name} ({(formData.attachment.size / 1024).toFixed(2)} KB)
+                  </p>
+                )}
+              </div>
+
+              {/* Recurring Task Options */}
+              <div className="space-y-3 border-t pt-3">
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="is_recurring"
+                    checked={formData.is_recurring}
+                    onCheckedChange={(checked) => setFormData({ ...formData, is_recurring: checked as boolean })}
+                  />
+                  <Label htmlFor="is_recurring" className="text-sm font-normal cursor-pointer flex items-center gap-1">
+                    <Repeat className="h-4 w-4" />
+                    Make this a recurring task
+                  </Label>
+                </div>
+
+                {formData.is_recurring && (
+                  <div className="space-y-3 pl-6 border-l-2">
+                    <div className="space-y-2">
+                      <Label htmlFor="recurrence_type">Repeat Frequency *</Label>
+                      <Select
+                        value={formData.recurrence_type || "daily"}
+                        onValueChange={(value) => setFormData({ ...formData, recurrence_type: value as "daily" | "weekly" | "monthly" })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="daily">Daily</SelectItem>
+                          <SelectItem value="weekly">Weekly</SelectItem>
+                          <SelectItem value="monthly">Monthly</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {formData.recurrence_type === "weekly" && (
+                      <div className="space-y-2">
+                        <Label htmlFor="recurrence_day">Day of Week *</Label>
+                        <Select
+                          value={formData.recurrence_day?.toString() || "0"}
+                          onValueChange={(value) => setFormData({ ...formData, recurrence_day: parseInt(value) })}
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="0">Sunday</SelectItem>
+                            <SelectItem value="1">Monday</SelectItem>
+                            <SelectItem value="2">Tuesday</SelectItem>
+                            <SelectItem value="3">Wednesday</SelectItem>
+                            <SelectItem value="4">Thursday</SelectItem>
+                            <SelectItem value="5">Friday</SelectItem>
+                            <SelectItem value="6">Saturday</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+
+                    {formData.recurrence_type === "monthly" && (
+                      <div className="space-y-2">
+                        <Label htmlFor="recurrence_day">Day of Month * (1-31)</Label>
+                        <Input
+                          id="recurrence_day"
+                          type="number"
+                          min="1"
+                          max="31"
+                          value={formData.recurrence_day || ""}
+                          onChange={(e) => {
+                            const day = parseInt(e.target.value);
+                            if (day >= 1 && day <= 31) {
+                              setFormData({ ...formData, recurrence_day: day });
+                            }
+                          }}
+                          placeholder="e.g., 1 (first day of month)"
+                        />
+                      </div>
+                    )}
+
+                    <div className="space-y-2">
+                      <Label>End Date (Optional)</Label>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant="outline"
+                            className={cn(
+                              "w-full justify-start text-left font-normal",
+                              !formData.recurrence_end_date && "text-muted-foreground"
+                            )}
+                          >
+                            <CalendarIcon className="mr-2 h-4 w-4" />
+                            {formData.recurrence_end_date ? format(formData.recurrence_end_date, "PPP") : "No end date (repeat indefinitely)"}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                          <Calendar
+                            mode="single"
+                            selected={formData.recurrence_end_date}
+                            onSelect={(date) => setFormData({ ...formData, recurrence_end_date: date })}
+                            initialFocus
+                          />
+                        </PopoverContent>
+                      </Popover>
+                    </div>
+                  </div>
+                )}
+              </div>
+
               <div className="flex flex-col sm:flex-row gap-2">
                 <Button type="submit" className="bg-gradient-primary sm:flex-1">
                   Create Task
@@ -547,7 +781,7 @@ const TaskAssignment = ({ departmentId, assignedBy }: TaskAssignmentProps) => {
             <h3 className="text-sm font-semibold mb-3">
               Active Tasks ({tasks.filter(t => t.status !== "completed").length})
             </h3>
-            <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
               {tasks
                 .filter(t => t.status !== "completed")
                 .map((task) => {
@@ -717,9 +951,9 @@ const TaskAssignment = ({ departmentId, assignedBy }: TaskAssignmentProps) => {
                           <span>{format(new Date(task.deadline), "PPP")}</span>
                         </div>
                       )}
-                    </div>
-                  </Card>
-                ))}
+            </div>
+          </Card>
+        ))}
             </div>
           </div>
         )}
