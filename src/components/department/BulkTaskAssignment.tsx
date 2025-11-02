@@ -110,7 +110,7 @@ const BulkTaskAssignment = ({ departmentId, assignedBy }: BulkTaskAssignmentProp
       status: "pending" as "pending",
     }));
 
-    const { error } = await supabase.from("tasks").insert(tasks);
+    const { error, data: newTasks } = await supabase.from("tasks").insert(tasks).select();
 
     if (error) {
       showError("Failed to create tasks");
@@ -128,11 +128,14 @@ const BulkTaskAssignment = ({ departmentId, assignedBy }: BulkTaskAssignmentProp
     
     const assignerName = assignerData?.name || "Department Head";
     
+    // Get task IDs for WhatsApp links
+    const taskIds = newTasks ? newTasks.map(task => task.id) : [];
+    
     // Send push notifications
     await notifyBulkTasksAssigned(formData.title, selectedEmployees, assignerName);
     
     // Send WhatsApp notifications
-    await notifyBulkEmployeeTasksAssigned(formData.title, selectedEmployees, assignerName, 1);
+    await notifyBulkEmployeeTasksAssigned(formData.title, selectedEmployees, assignerName, 1, taskIds);
     
     setShowDialog(false);
     setSelectedEmployees([]);

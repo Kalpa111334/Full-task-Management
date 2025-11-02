@@ -9,6 +9,7 @@ import { CheckCircle2, X, User, Clock, MapPin } from "lucide-react";
 import { format, differenceInMinutes } from "date-fns";
 import { notifyTaskVerificationRequest, notifyTaskRejected } from "@/lib/notificationService";
 import { TaskAutoReassignmentService } from "@/lib/taskAutoReassignment";
+import { TaskReassignmentService } from "@/lib/taskReassignmentService";
 
 interface Task {
   id: string;
@@ -136,50 +137,65 @@ const TaskApproval = ({ departmentId, approvedBy }: TaskApprovalProps) => {
 
     // Prompt for rejection reason
     const reason = prompt("Please provide a reason for rejecting this task:");
-    if (!reason) {
+    if (!reason || !reason.trim()) {
       showError("Rejection reason is required");
       return;
     }
 
-    // Try auto-reassignment first
-    const reassignmentSuccess = await TaskAutoReassignmentService.handleTaskRejection(
+    // Use automatic reassignment service (reassigns to employee and department head)
+    const result = await TaskReassignmentService.reassignRejectedTask(
       taskId,
       approvedBy,
       reason
     );
 
-    if (reassignmentSuccess) {
-      showSuccess("Task has been automatically reassigned to another employee");
-    } else {
-      // Fallback to regular rejection
-      const { error } = await supabase
-        .from("tasks")
-        .update({
-          status: "in_progress",
-          completed_at: null,
-          completion_photo_url: null,
-          rejection_reason: reason,
-          rejection_count: (task.rejection_count || 0) + 1
-        })
-        .eq("id", taskId);
-
-      if (error) {
-        showError("Failed to reject task");
-        return;
+    if (result.success) {
+      if (result.deptHeadReassigned) {
+        showSuccess("Task rejected and automatically reassigned to employee and department head");
+      } else {
+        showSuccess("Task rejected and automatically reassigned to employee");
       }
+    } else {
+      // Fallback: try the old auto-reassignment service
+      const reassignmentSuccess = await TaskAutoReassignmentService.handleTaskRejection(
+        taskId,
+        approvedBy,
+        reason
+      );
 
-      showSuccess("Task rejected. Employee can resubmit.");
-      
-      // Notify employee about rejection
-      if (task.assigned_to) {
-        const { data: approverData } = await supabase
-          .from("employees")
-          .select("name")
-          .eq("id", approvedBy)
-          .single();
+      if (reassignmentSuccess) {
+        showSuccess("Task has been automatically reassigned to another employee");
+      } else {
+        // Final fallback: just reassign to employee
+        const { error } = await supabase
+          .from("tasks")
+          .update({
+            status: "pending",
+            completed_at: null,
+            completion_photo_url: null,
+            rejection_reason: reason,
+            rejection_count: (task.rejection_count || 0) + 1
+          })
+          .eq("id", taskId);
+
+        if (error) {
+          showError("Failed to reject task");
+          return;
+        }
+
+        showSuccess("Task rejected. Employee can resubmit.");
         
-        const approverName = approverData?.name || "Department Head";
-        await notifyTaskRejected(task.title, approverName, task.assigned_to, reason);
+        // Notify employee about rejection
+        if (task.assigned_to) {
+          const { data: approverData } = await supabase
+            .from("employees")
+            .select("name")
+            .eq("id", approvedBy)
+            .single();
+          
+          const approverName = approverData?.name || "Department Head";
+          await notifyTaskRejected(task.title, approverName, task.assigned_to, reason);
+        }
       }
     }
     

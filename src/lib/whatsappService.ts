@@ -61,6 +61,16 @@ const sendWhatsAppMessage = async (params: WhatsAppMessageParams): Promise<boole
 };
 
 /**
+ * Generate a task URL for the given task ID
+ * @param taskId - Task ID
+ * @returns Full URL to the task detail page
+ */
+const getTaskUrl = (taskId: string): string => {
+  const baseUrl = window.location.origin;
+  return `${baseUrl}/task/${taskId}`;
+};
+
+/**
  * Format phone number to ensure it's in the correct format (94XXXXXXXXX)
  * @param phone - Phone number to format
  * @returns Formatted phone number or null if invalid
@@ -138,7 +148,8 @@ const getEmployeePhone = async (employeeId: string): Promise<string | null> => {
 export const notifyDeptHeadTaskAssigned = async (
   taskTitle: string,
   deptHeadId: string,
-  assignedByName: string
+  assignedByName: string,
+  taskId?: string
 ): Promise<boolean> => {
   console.log('📨 Starting WhatsApp notification for dept head:', deptHeadId);
   
@@ -151,10 +162,16 @@ export const notifyDeptHeadTaskAssigned = async (
 
   console.log('✅ Phone found, sending WhatsApp to:', phone);
 
-  const message = `🎯 *New Task Assigned*\n\n` +
+  let message = `🎯 *New Task Assigned*\n\n` +
     `Hello! You have been assigned a new task by *${assignedByName}*.\n\n` +
-    `📋 *Task:* ${taskTitle}\n\n` +
-    `Please check your dashboard for details and assign it to your team members.\n\n` +
+    `📋 *Task:* ${taskTitle}\n\n`;
+
+  if (taskId) {
+    const taskUrl = getTaskUrl(taskId);
+    message += `🔗 *View Task:* ${taskUrl}\n\n`;
+  }
+
+  message += `Please check your dashboard for details and assign it to your team members.\n\n` +
     `_Task Management System_`;
 
   const result = await sendWhatsAppMessage({
@@ -175,7 +192,8 @@ export const notifyEmployeeTaskAssigned = async (
   employeeId: string,
   assignedByName: string,
   deadline?: string | null,
-  priority?: string
+  priority?: string,
+  taskId?: string
 ): Promise<boolean> => {
   console.log('📨 Starting WhatsApp notification for employee:', employeeId);
   
@@ -218,6 +236,11 @@ export const notifyEmployeeTaskAssigned = async (
     }
   }
 
+  if (taskId) {
+    const taskUrl = getTaskUrl(taskId);
+    message += `\n🔗 *View Task:* ${taskUrl}\n`;
+  }
+
   message += `\nPlease check your dashboard to view details and start working on the task.\n\n` +
     `_Task Management System_`;
 
@@ -238,20 +261,31 @@ export const notifyBulkEmployeeTasksAssigned = async (
   taskTitle: string,
   employeeIds: string[],
   assignedByName: string,
-  taskCount: number = 1
+  taskCount: number = 1,
+  taskIds?: string[]
 ): Promise<void> => {
   // Send notifications to all employees in parallel
-  const promises = employeeIds.map(async (employeeId) => {
+  const promises = employeeIds.map(async (employeeId, index) => {
     const phone = await getEmployeePhone(employeeId);
     if (!phone) {
       console.warn('⚠️ No phone number found for employee:', employeeId);
       return false;
     }
 
-    const message = `✅ *${taskCount > 1 ? 'Tasks' : 'Task'} Assigned*\n\n` +
+    let message = `✅ *${taskCount > 1 ? 'Tasks' : 'Task'} Assigned*\n\n` +
       `Hello! You have been assigned ${taskCount > 1 ? taskCount + ' new tasks' : 'a new task'} by *${assignedByName}*.\n\n` +
-      `📋 *Task:* ${taskTitle}\n\n` +
-      `Please check your dashboard to view details and start working.\n\n` +
+      `📋 *Task:* ${taskTitle}\n`;
+
+    // Add task link if available (use first taskId or corresponding taskId for this employee)
+    if (taskIds && taskIds.length > 0) {
+      const taskId = taskIds[index] || taskIds[0]; // Use corresponding taskId or fallback to first
+      if (taskId) {
+        const taskUrl = getTaskUrl(taskId);
+        message += `\n🔗 *View Task:* ${taskUrl}\n`;
+      }
+    }
+
+    message += `\nPlease check your dashboard to view details and start working.\n\n` +
       `_Task Management System_`;
 
     return sendWhatsAppMessage({

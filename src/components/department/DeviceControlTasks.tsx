@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
+import { sortTasksByStatus } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -43,6 +45,7 @@ interface DeviceControlTasksProps {
 }
 
 const DeviceControlTasks = ({ departmentId, departmentName, departmentHeadId }: DeviceControlTasksProps) => {
+  const navigate = useNavigate();
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [selectedEmployees, setSelectedEmployees] = useState<string[]>([]);
@@ -100,15 +103,16 @@ const DeviceControlTasks = ({ departmentId, departmentName, departmentHeadId }: 
       .from("tasks")
       .select("*, employee:employees!tasks_assigned_to_fkey(name)")
       .eq("department_id", departmentId)
-      .eq("task_type", "location_based")
-      .order("created_at", { ascending: false });
+      .eq("task_type", "location_based");
 
     if (error) {
       showError("Failed to load tasks");
       return;
     }
 
-    setTasks(data || []);
+    // Sort tasks: pending/in_progress at top, completed at bottom
+    const sortedTasks = sortTasksByStatus(data || []);
+    setTasks(sortedTasks);
   };
 
   const toggleEmployee = (employeeId: string) => {
@@ -150,7 +154,7 @@ const DeviceControlTasks = ({ departmentId, departmentName, departmentHeadId }: 
       status: "pending" as const,
     }));
 
-    const { error } = await supabase.from("tasks").insert(tasksToCreate);
+    const { error, data: newTasks } = await supabase.from("tasks").insert(tasksToCreate).select();
 
     if (error) {
       showError("Failed to create tasks");
@@ -168,13 +172,16 @@ const DeviceControlTasks = ({ departmentId, departmentName, departmentHeadId }: 
     
     const deptHeadName = deptHeadData?.name || "Department Head";
     
+    // Get task IDs for WhatsApp links
+    const taskIds = newTasks ? newTasks.map(task => task.id) : [];
+    
     // Import notification services at the top of the file
     // Send notifications to all selected employees
     const { notifyBulkTasksAssigned } = await import("@/lib/notificationService");
     const { notifyBulkEmployeeTasksAssigned } = await import("@/lib/whatsappService");
     
     await notifyBulkTasksAssigned(formData.title, selectedEmployees, deptHeadName);
-    await notifyBulkEmployeeTasksAssigned(formData.title, selectedEmployees, deptHeadName, 1);
+    await notifyBulkEmployeeTasksAssigned(formData.title, selectedEmployees, deptHeadName, 1, taskIds);
     
     setShowCreateDialog(false);
     setSelectedEmployees([]);
@@ -319,7 +326,11 @@ const DeviceControlTasks = ({ departmentId, departmentName, departmentHeadId }: 
         <h3 className="text-lg font-semibold mb-4">Active Tasks</h3>
         <div className="grid gap-4">
           {tasks.filter((t) => t.status !== "completed").map((task) => (
-            <Card key={task.id} className="p-4">
+            <Card 
+              key={task.id} 
+              className="p-4 cursor-pointer hover:shadow-lg transition-all"
+              onClick={() => navigate(`/task/${task.id}`)}
+            >
               <div className="flex items-start justify-between">
                 <div className="flex-1">
                   <div className="flex items-center justify-between mb-1">
@@ -350,7 +361,10 @@ const DeviceControlTasks = ({ departmentId, departmentName, departmentHeadId }: 
                   {task.status === "pending" && (
                     <Button
                       size="sm"
-                      onClick={() => handleStartTask(task.id)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleStartTask(task.id);
+                      }}
                       className="bg-primary"
                     >
                       <Play className="h-4 w-4 mr-2" />
@@ -360,7 +374,10 @@ const DeviceControlTasks = ({ departmentId, departmentName, departmentHeadId }: 
                 {task.status === "in_progress" && (
                   <Button
                     size="sm"
-                    onClick={() => handleCompleteTask(task.id)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleCompleteTask(task.id);
+                    }}
                     className="bg-success"
                   >
                     <CheckCircle2 className="h-4 w-4 mr-2" />
@@ -385,7 +402,11 @@ const DeviceControlTasks = ({ departmentId, departmentName, departmentHeadId }: 
         <h3 className="text-lg font-semibold mb-4">Completed Tasks</h3>
         <div className="grid gap-4">
           {tasks.filter((t) => t.status === "completed").map((task) => (
-            <Card key={task.id} className="p-4 opacity-75">
+            <Card 
+              key={task.id} 
+              className="p-4 opacity-75 cursor-pointer hover:shadow-lg transition-all"
+              onClick={() => navigate(`/task/${task.id}`)}
+            >
               <div className="flex items-start justify-between">
                 <div className="flex-1">
                   <div className="flex items-center justify-between mb-1">

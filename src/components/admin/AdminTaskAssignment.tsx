@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -14,7 +15,7 @@ import { format } from "date-fns";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { CalendarIcon } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, sortTasksByStatus, isTaskNewToday } from "@/lib/utils";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Checkbox } from "@/components/ui/checkbox";
 import { notifyTaskAssigned, notifyTaskDeactivated, notifyTaskActivated, notifyTaskDeleted } from "@/lib/notificationService";
@@ -47,6 +48,7 @@ interface AdminTaskAssignmentProps {
 }
 
 const AdminTaskAssignment = ({ adminId }: AdminTaskAssignmentProps) => {
+  const navigate = useNavigate();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [departmentHeads, setDepartmentHeads] = useState<DepartmentHead[]>([]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -87,15 +89,16 @@ const AdminTaskAssignment = ({ adminId }: AdminTaskAssignmentProps) => {
         *,
         employee:employees!tasks_assigned_to_fkey (name),
         department:departments (name)
-      `)
-      .order("created_at", { ascending: false });
+      `);
 
     if (error) {
       showError("Failed to fetch tasks");
       return;
     }
 
-    setTasks(data || []);
+    // Sort tasks: pending/in_progress at top, completed at bottom
+    const sortedTasks = sortTasksByStatus(data || []);
+    setTasks(sortedTasks);
   };
 
   const fetchDepartmentHeads = async () => {
@@ -240,10 +243,11 @@ const AdminTaskAssignment = ({ adminId }: AdminTaskAssignmentProps) => {
         showSuccess("Task assigned to department head successfully");
         if (retryTask && retryTask.length > 0) {
           const adminName = adminData?.name || "Admin";
+          const taskId = retryTask[0]?.id;
           // Send push notification
           await notifyTaskAssigned(formData.title, formData.assigned_to, adminName);
           // Send WhatsApp notification
-          await notifyDeptHeadTaskAssigned(formData.title, formData.assigned_to, adminName);
+          await notifyDeptHeadTaskAssigned(formData.title, formData.assigned_to, adminName, taskId);
         }
         setIsDialogOpen(false);
         resetForm();
@@ -261,10 +265,11 @@ const AdminTaskAssignment = ({ adminId }: AdminTaskAssignmentProps) => {
     // Send push notification and WhatsApp notification
     if (newTask && newTask.length > 0) {
       const adminName = adminData?.name || "Admin";
+      const taskId = newTask[0]?.id;
       // Send push notification
       await notifyTaskAssigned(formData.title, formData.assigned_to, adminName);
       // Send WhatsApp notification
-      await notifyDeptHeadTaskAssigned(formData.title, formData.assigned_to, adminName);
+      await notifyDeptHeadTaskAssigned(formData.title, formData.assigned_to, adminName, taskId);
     }
 
     setIsDialogOpen(false);
@@ -497,9 +502,26 @@ const AdminTaskAssignment = ({ adminId }: AdminTaskAssignmentProps) => {
       </div>
 
       {/* Tasks Grid */}
-      <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
-        {tasks.map((task) => (
-          <Card key={task.id} className="p-3 sm:p-4 hover:shadow-lg transition-all animate-fade-in">
+      <div className="space-y-6">
+        {/* Pending/In Progress Tasks */}
+        {tasks.filter(t => t.status !== "completed").length > 0 && (
+          <div>
+            <h3 className="text-sm font-semibold mb-3">
+              Active Tasks ({tasks.filter(t => t.status !== "completed").length})
+            </h3>
+            <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+              {tasks
+                .filter(t => t.status !== "completed")
+                .map((task) => {
+                  const isNewToday = isTaskNewToday(task.created_at);
+                  return (
+                    <Card 
+                      key={task.id} 
+                      className={`p-3 sm:p-4 hover:shadow-lg transition-all animate-fade-in cursor-pointer ${
+                        isNewToday ? "border-l-4 border-l-primary bg-primary/5" : ""
+                      }`}
+                      onClick={() => navigate(`/task/${task.id}`)}
+                    >
             <div className="flex items-start justify-between mb-3">
               <div className="flex-1">
                 <h3 className="font-semibold text-sm sm:text-base mb-1">{task.title}</h3>
@@ -552,7 +574,10 @@ const AdminTaskAssignment = ({ adminId }: AdminTaskAssignmentProps) => {
               <Button
                 size="sm"
                 variant={task.is_active ? "outline" : "default"}
-                onClick={() => handleToggleActive(task.id, task.is_active)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleToggleActive(task.id, task.is_active);
+                }}
                 className="flex-1"
               >
                 {task.is_active ? (
@@ -570,20 +595,135 @@ const AdminTaskAssignment = ({ adminId }: AdminTaskAssignmentProps) => {
               <Button
                 size="sm"
                 variant="destructive"
-                onClick={() => handleDeleteTask(task.id)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleDeleteTask(task.id);
+                }}
               >
                 <Trash2 className="h-3 w-3" />
               </Button>
             </div>
+            {isNewToday && (
+              <div className="mt-2 flex items-center gap-1 text-xs text-primary">
+                <span className="inline-block h-1.5 w-1.5 bg-primary rounded-full animate-pulse"></span>
+                New Today
+              </div>
+            )}
           </Card>
-        ))}
-      </div>
+                  );
+                })}
+            </div>
+          </div>
+        )}
 
-      {tasks.length === 0 && (
-        <Card className="p-8 text-center">
-          <p className="text-muted-foreground">No tasks assigned yet. Create your first task to get started.</p>
-        </Card>
-      )}
+        {/* Completed Tasks */}
+        {tasks.filter(t => t.status === "completed").length > 0 && (
+          <div className="pt-6 border-t">
+            <h3 className="text-sm font-semibold mb-3 text-muted-foreground">
+              Completed Tasks ({tasks.filter(t => t.status === "completed").length})
+            </h3>
+            <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+              {tasks
+                .filter(t => t.status === "completed")
+                .map((task) => (
+                  <Card 
+                    key={task.id} 
+                    className="p-3 sm:p-4 hover:shadow-lg transition-all animate-fade-in cursor-pointer opacity-75"
+                    onClick={() => navigate(`/task/${task.id}`)}
+                  >
+                    <div className="flex items-start justify-between mb-3">
+                      <div className="flex-1">
+                        <h3 className="font-semibold text-sm sm:text-base mb-1">{task.title}</h3>
+                        {task.description && (
+                          <p className="text-sm text-muted-foreground line-clamp-2 mb-2">{task.description}</p>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap gap-2 mb-3">
+                      <Badge className={getPriorityColor(task.priority)}>
+                        {task.priority}
+                      </Badge>
+                      <Badge className={getStatusColor(task.status)}>
+                        {task.status.replace("_", " ")}
+                      </Badge>
+                      <Badge variant={task.is_active ? "default" : "secondary"}>
+                        {task.is_active ? "Active" : "Inactive"}
+                      </Badge>
+                    </div>
+
+                    <div className="space-y-2 text-sm mb-3">
+                      {task.employee?.name && (
+                        <div className="flex items-center gap-2 text-muted-foreground">
+                          <User className="h-4 w-4" />
+                          <span>{task.employee.name}</span>
+                        </div>
+                      )}
+                      {task.department?.name && (
+                        <div className="flex items-center gap-2 text-muted-foreground">
+                          <User className="h-4 w-4" />
+                          <span>Dept: {task.department.name}</span>
+                        </div>
+                      )}
+                      {task.location_address && (
+                        <div className="flex items-center gap-2 text-muted-foreground">
+                          <MapPin className="h-4 w-4" />
+                          <span className="truncate">{task.location_address}</span>
+                        </div>
+                      )}
+                      {task.deadline && (
+                        <div className="flex items-center gap-2 text-muted-foreground">
+                          <Clock className="h-4 w-4" />
+                          <span>{format(new Date(task.deadline), "MMM dd, yyyy")}</span>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        variant={task.is_active ? "outline" : "default"}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleToggleActive(task.id, task.is_active);
+                        }}
+                        className="flex-1"
+                      >
+                        {task.is_active ? (
+                          <>
+                            <PowerOff className="h-3 w-3 mr-1" />
+                            Deactivate
+                          </>
+                        ) : (
+                          <>
+                            <Power className="h-3 w-3 mr-1" />
+                            Activate
+                          </>
+                        )}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteTask(task.id);
+                        }}
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  </Card>
+                ))}
+            </div>
+          </div>
+        )}
+
+        {tasks.length === 0 && (
+          <Card className="p-8 text-center">
+            <p className="text-muted-foreground">No tasks assigned yet. Create your first task to get started.</p>
+          </Card>
+        )}
+      </div>
     </div>
   );
 };

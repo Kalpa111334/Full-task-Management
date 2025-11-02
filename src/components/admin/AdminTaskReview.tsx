@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { showSuccess, showError } from "@/lib/sweetalert";
 import { CheckCircle, XCircle, Clock, AlertCircle, User, MapPin, Camera } from "lucide-react";
 import { format } from "date-fns";
+import { TaskReassignmentService } from "@/lib/taskReassignmentService";
 
 interface Task {
   id: string;
@@ -180,7 +181,7 @@ const AdminTaskReview = ({ adminId }: AdminTaskReviewProps) => {
       return;
     }
 
-    // Update task with rejection
+    // Update task with rejection status
     const updateData: any = {
       status: "pending", // Reset to pending for re-assignment
     };
@@ -218,22 +219,23 @@ const AdminTaskReview = ({ adminId }: AdminTaskReviewProps) => {
       }
     }
 
-    // Auto-reassign task to the same department head
-    const { error: reassignError } = await supabase
-      .from("tasks")
-      .update({
-        assigned_to: selectedTask.assigned_to,
-        completed_at: null,
-        completion_photo_url: null,
-      })
-      .eq("id", selectedTask.id);
+    // Automatically reassign to employee and department head
+    const result = await TaskReassignmentService.reassignRejectedTask(
+      selectedTask.id,
+      adminId,
+      rejectReason
+    );
 
-    if (reassignError) {
-      showError("Task rejected but failed to re-assign");
+    if (result.success) {
+      if (result.deptHeadReassigned) {
+        showSuccess("Task rejected and reassigned to both employee and department head");
+      } else {
+        showSuccess("Task rejected and reassigned to employee" + (result.message.includes('department head') ? '' : ' (department head not found)'));
+      }
+    } else {
+      showError(result.message || "Task rejected but reassignment failed");
       return;
     }
-
-    showSuccess("Task rejected and re-assigned to department head");
     
     // Reset state
     setShowRejectDialog(false);

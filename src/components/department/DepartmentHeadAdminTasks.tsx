@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
+import { sortTasksByStatus } from "@/lib/utils";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -31,6 +33,7 @@ interface DepartmentHeadAdminTasksProps {
 }
 
 const DepartmentHeadAdminTasks = ({ departmentHeadId }: DepartmentHeadAdminTasksProps) => {
+  const navigate = useNavigate();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [showCameraDialog, setShowCameraDialog] = useState(false);
@@ -113,8 +116,7 @@ const DepartmentHeadAdminTasks = ({ departmentHeadId }: DepartmentHeadAdminTasks
           admin:employees!tasks_assigned_by_fkey (id, name, role)
         `)
         .eq("assigned_to", departmentHeadId)
-        .in("assigned_by", adminIds)
-        .order("created_at", { ascending: false });
+        .in("assigned_by", adminIds);
 
       if (error) {
         console.error("Error fetching tasks:", error);
@@ -139,7 +141,9 @@ const DepartmentHeadAdminTasks = ({ departmentHeadId }: DepartmentHeadAdminTasks
         return isAssignedByAdmin;
       });
 
-      setTasks(adminAssignedTasks);
+      // Sort tasks: pending/in_progress at top, completed at bottom
+      const sortedTasks = sortTasksByStatus(adminAssignedTasks);
+      setTasks(sortedTasks);
     } catch (err) {
       console.error("Unexpected error in fetchTasks:", err);
       showError("An unexpected error occurred while fetching tasks");
@@ -482,7 +486,11 @@ const DepartmentHeadAdminTasks = ({ departmentHeadId }: DepartmentHeadAdminTasks
       {/* Tasks Grid */}
       <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
         {displayTasks.map((task) => (
-          <Card key={task.id} className="p-3 sm:p-4 hover:shadow-lg transition-all">
+          <Card 
+            key={task.id} 
+            className="p-3 sm:p-4 hover:shadow-lg transition-all cursor-pointer"
+            onClick={() => navigate(`/task/${task.id}`)}
+          >
             <div className="flex items-start justify-between mb-3">
               <div className="flex-1">
                 <h3 className="font-semibold text-sm sm:text-base mb-1">{task.title}</h3>

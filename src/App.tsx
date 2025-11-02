@@ -10,6 +10,7 @@ import Login from "./pages/Login";
 import Admin from "./pages/Admin";
 import DepartmentHead from "./pages/DepartmentHead";
 import Employee from "./pages/Employee";
+import TaskDetail from "./pages/TaskDetail";
 import NotFound from "./pages/NotFound";
 import SelfLocationPublisher from "@/components/map/SelfLocationPublisher";
 
@@ -48,6 +49,7 @@ const App = () => {
             <Route path="/admin" element={<Admin />} />
             <Route path="/department-head" element={<DepartmentHead />} />
             <Route path="/employee" element={<Employee />} />
+            <Route path="/task/:id" element={<TaskDetail />} />
             <Route path="/index" element={<Index />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />

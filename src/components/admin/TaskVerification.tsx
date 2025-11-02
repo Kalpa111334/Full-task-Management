@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { showSuccess, showError } from "@/lib/sweetalert";
 import { CheckCircle, XCircle, Clock, AlertCircle } from "lucide-react";
 import { notifyTaskVerificationApproved, notifyTaskVerificationRejected, notifyTaskApproved, notifyTaskRejected } from "@/lib/notificationService";
+import { TaskReassignmentService } from "@/lib/taskReassignmentService";
 
 interface VerificationRequest {
   id: string;
@@ -179,42 +180,58 @@ const TaskVerification = ({ adminId }: TaskVerificationProps) => {
       return;
     }
 
-    const { error: taskError } = await supabase
-      .from("tasks")
-      .update({ status: "in_progress" })
-      .eq("id", selectedRequest.task_id);
-
-    if (taskError) {
-      showError("Failed to update task status");
-      return;
-    }
-
-    showSuccess("Request rejected and task sent back to employee");
-    
-    // Send notifications
-    const { data: adminData } = await supabase
-      .from("employees")
-      .select("name")
-      .eq("id", adminId)
-      .single();
-    
-    const adminName = adminData?.name || "Admin";
-    
-    // Notify department head who requested verification
-    await notifyTaskVerificationRejected(
-      selectedRequest.task.title,
-      selectedRequest.requested_by,
-      adminName
+    // Automatically reassign task to employee and department head
+    const result = await TaskReassignmentService.reassignRejectedTask(
+      selectedRequest.task_id,
+      adminId,
+      rejectReason
     );
-    
-    // Notify employee
-    if (selectedRequest.task.assigned_to) {
-      await notifyTaskRejected(
+
+    if (result.success) {
+      if (result.deptHeadReassigned) {
+        showSuccess("Request rejected. Task reassigned to employee and department head");
+      } else {
+        showSuccess("Request rejected. Task reassigned to employee");
+      }
+    } else {
+      // Fallback: just update task status
+      const { error: taskError } = await supabase
+        .from("tasks")
+        .update({ status: "pending" })
+        .eq("id", selectedRequest.task_id);
+
+      if (taskError) {
+        showError("Failed to update task status");
+        return;
+      }
+
+      showSuccess("Request rejected and task sent back to employee");
+      
+      // Send notifications
+      const { data: adminData } = await supabase
+        .from("employees")
+        .select("name")
+        .eq("id", adminId)
+        .single();
+      
+      const adminName = adminData?.name || "Admin";
+      
+      // Notify department head who requested verification
+      await notifyTaskVerificationRejected(
         selectedRequest.task.title,
-        adminName,
-        selectedRequest.task.assigned_to,
-        rejectReason
+        selectedRequest.requested_by,
+        adminName
       );
+      
+      // Notify employee
+      if (selectedRequest.task.assigned_to) {
+        await notifyTaskRejected(
+          selectedRequest.task.title,
+          adminName,
+          selectedRequest.task.assigned_to,
+          rejectReason
+        );
+      }
     }
     
     setShowRejectDialog(false);
