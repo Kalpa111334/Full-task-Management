@@ -2,11 +2,12 @@ import { supabase } from '@/integrations/supabase/client';
 
 /**
  * WhatsApp Notification Service
- * Sends WhatsApp messages via the GeeKHirusha API
- * API Documentation: http://api.geekhirusha.com/emptaskmanagement.php
+ * Sends WhatsApp messages via Vercel serverless function
+ * This avoids CORS issues when deployed on Vercel
  */
 
-const WHATSAPP_API_BASE_URL = 'http://api.geekhirusha.com/emptaskmanagement.php';
+// Use serverless function in production, direct API in development
+const WHATSAPP_API_ENDPOINT = '/api/send-whatsapp';
 
 export type WhatsAppMessageType = 'text' | 'image' | 'video' | 'audio' | 'pdf';
 
@@ -18,32 +19,31 @@ interface WhatsAppMessageParams {
 }
 
 /**
- * Send a WhatsApp message via the API
+ * Send a WhatsApp message via the serverless API
  * @param params - Message parameters including number, type, message, and optional mediaUrl
  * @returns Promise<boolean> - True if message was sent successfully
  */
 const sendWhatsAppMessage = async (params: WhatsAppMessageParams): Promise<boolean> => {
   try {
-    const url = new URL(WHATSAPP_API_BASE_URL);
-    url.searchParams.append('number', params.number);
-    url.searchParams.append('type', params.type);
-    
-    if (params.message) {
-      url.searchParams.append('message', params.message);
-    }
-    
-    if (params.mediaUrl) {
-      url.searchParams.append('mediaUrl', params.mediaUrl);
-    }
-
     console.log('📱 Sending WhatsApp message to:', params.number);
     
-    const response = await fetch(url.toString(), {
-      method: 'GET',
+    // Call our serverless function instead of direct API
+    const response = await fetch(WHATSAPP_API_ENDPOINT, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        number: params.number,
+        type: params.type,
+        message: params.message,
+        mediaUrl: params.mediaUrl,
+      }),
     });
 
     if (!response.ok) {
-      console.error('❌ WhatsApp API error:', response.statusText);
+      const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+      console.error('❌ WhatsApp API error:', errorData.error || response.statusText);
       return false;
     }
 
