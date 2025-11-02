@@ -542,3 +542,102 @@ export const notifyAdminVerificationRejected = async (
     });
   }
 };
+
+/**
+ * Notification: Employee Registration - Welcome with login credentials
+ * Sends WhatsApp notification with login credentials when admin registers a new employee
+ */
+export const notifyEmployeeRegistered = async (
+  employeeName: string,
+  employeeId: string,
+  email: string,
+  password: string,
+  role: string,
+  departmentName?: string | null
+): Promise<boolean> => {
+  console.log('📨 Starting WhatsApp notification for employee registration:', employeeId);
+  
+  const phone = await getEmployeePhone(employeeId);
+  if (!phone) {
+    console.warn('⚠️ No phone number found for employee:', employeeId);
+    return false;
+  }
+
+  console.log('✅ Phone found, sending WhatsApp to:', phone);
+
+  const baseUrl = window.location.origin;
+  const loginUrl = `${baseUrl}/login`;
+
+  const roleLabel = role === 'department_head' ? 'Department Head' : role === 'admin' ? 'Administrator' : 'Employee';
+  const deptText = departmentName ? `\n📁 *Department:* ${departmentName}\n` : '\n';
+
+  let message = `🎉 *Welcome to Task Management System*\n\n` +
+    `Hello *${employeeName}*! Your account has been successfully registered.\n\n` +
+    `👤 *Your Role:* ${roleLabel}${deptText}` +
+    `🔐 *Login Credentials:*\n` +
+    `   📧 *Email:* ${email}\n` +
+    `   🔑 *Password:* ${password}\n\n` +
+    `🌐 *Login URL:*\n${loginUrl}\n\n` +
+    `💡 *Important:*\n` +
+    `• Keep your credentials secure\n` +
+    `• Install the PWA app on your device for better experience\n` +
+    `• You can access the system anytime through the web or PWA\n\n` +
+    `_Task Management System_`;
+
+  const result = await sendWhatsAppMessage({
+    number: phone,
+    type: 'text',
+    message,
+  });
+
+  console.log('📱 WhatsApp notification result:', result ? '✅ Sent' : '❌ Failed');
+  return result;
+};
+
+/**
+ * Notification: Department Head Registration - Welcome with login credentials
+ * Sends WhatsApp notification with login credentials when admin registers a new department head
+ */
+export const notifyDepartmentHeadRegistered = async (
+  deptHeadName: string,
+  deptHeadId: string,
+  email: string,
+  password: string,
+  departmentName?: string | null
+): Promise<boolean> => {
+  console.log('📨 Starting WhatsApp notification for department head registration:', deptHeadId);
+  
+  const phone = await getEmployeePhone(deptHeadId);
+  if (!phone) {
+    console.warn('⚠️ No phone number found for department head:', deptHeadId);
+    return false;
+  }
+
+  console.log('✅ Phone found, sending WhatsApp to:', phone);
+
+  const baseUrl = window.location.origin;
+  const loginUrl = `${baseUrl}/login`;
+
+  const deptText = departmentName ? `\n📁 *Department:* ${departmentName}\n` : '\n';
+
+  let message = `👑 *Welcome as Department Head*\n\n` +
+    `Hello *${deptHeadName}*! Your department head account has been successfully registered.\n\n${deptText}` +
+    `🔐 *Login Credentials:*\n` +
+    `   📧 *Email:* ${email}\n` +
+    `   🔑 *Password:* ${password}\n\n` +
+    `🌐 *Login URL:*\n${loginUrl}\n\n` +
+    `💡 *Important:*\n` +
+    `• Keep your credentials secure\n` +
+    `• Install the PWA app on your device for real-time notifications\n` +
+    `• As a department head, you can assign tasks and manage your team\n\n` +
+    `_Task Management System_`;
+
+  const result = await sendWhatsAppMessage({
+    number: phone,
+    type: 'text',
+    message,
+  });
+
+  console.log('📱 WhatsApp notification result:', result ? '✅ Sent' : '❌ Failed');
+  return result;
+};

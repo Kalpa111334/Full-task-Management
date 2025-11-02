@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { showSuccess, showError, showConfirm } from "@/lib/sweetalert";
 import { Plus, Edit, Trash2, UserCheck, UserX } from "lucide-react";
 import { notifyEmployeeAdded, notifyEmployeeCredentials, notifyDepartmentHeadAssigned } from "@/lib/notificationService";
+import { notifyEmployeeRegistered, notifyDepartmentHeadRegistered } from "@/lib/whatsappService";
 import { Badge } from "@/components/ui/badge";
 
 interface Employee {
@@ -258,11 +259,12 @@ const EmployeeManagement = () => {
 
       showSuccess("Employee added successfully");
 
-      // Send welcome + credentials push if they have the PWA
+      // Send welcome + credentials notifications
       try {
         const employeeId = created[0].id as string;
         const employeeName = created[0].name as string;
-        let departmentName = "No Department";
+        const employeeRole = created[0].role as string;
+        let departmentName: string | null = null;
         if (created[0].department_id) {
           const { data: dept } = await supabase
             .from("departments")
@@ -272,8 +274,29 @@ const EmployeeManagement = () => {
           if (dept?.name) departmentName = dept.name;
         }
 
-        await notifyEmployeeAdded(employeeName, departmentName, employeeId);
+        // Push notifications (if they have PWA)
+        await notifyEmployeeAdded(employeeName, departmentName || "No Department", employeeId);
         await notifyEmployeeCredentials(employeeName, formData.email, formData.password, employeeId);
+
+        // WhatsApp notification with credentials (if they have phone number)
+        if (employeeRole === "department_head") {
+          await notifyDepartmentHeadRegistered(
+            employeeName,
+            employeeId,
+            formData.email,
+            formData.password,
+            departmentName
+          );
+        } else {
+          await notifyEmployeeRegistered(
+            employeeName,
+            employeeId,
+            formData.email,
+            formData.password,
+            employeeRole,
+            departmentName
+          );
+        }
       } catch (e) {
         // Non-fatal
         console.error("Failed to send employee notifications", e);
