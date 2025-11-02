@@ -290,11 +290,16 @@ const TaskCompletion = ({ taskId, onComplete, isOpen, onClose }: TaskCompletionP
 
       // Try alternative method using fetch API if Supabase invoke fails
       const uploadViaFetch = async (): Promise<any> => {
+        // Use the same env variable names as the Supabase client
         const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-        const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+        const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY;
         
-        if (!supabaseUrl || !anonKey) {
-          throw new Error('Supabase configuration missing');
+        if (!supabaseUrl) {
+          throw new Error('Supabase URL not configured. Please check your environment variables.');
+        }
+        
+        if (!anonKey) {
+          throw new Error('Supabase API key not configured. Please check your environment variables.');
         }
         
         const functionUrl = `${supabaseUrl}/functions/v1/upload-task-photo`;
