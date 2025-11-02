@@ -181,22 +181,30 @@ const TaskCompletion = ({ taskId, onComplete, isOpen, onClose }: TaskCompletionP
         return;
       }
 
-      // Flip the image back since we mirrored the video for better UX
-      ctx.save();
-      ctx.translate(canvas.width, 0);
-      ctx.scale(-1, 1);
+      // Draw the video image directly (no mirroring)
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      ctx.restore();
 
-      // Convert canvas to blob
+      // Convert canvas to blob with error handling
       canvas.toBlob(
         (blob) => {
           if (!blob) {
-            showError("Failed to capture photo. Please try again.");
+            console.error("Canvas toBlob returned null");
+            showError("Failed to capture photo. The image data is invalid. Please try again.");
             return;
           }
 
           try {
+            // Validate blob size
+            if (blob.size === 0) {
+              showError("Captured photo is empty. Please try again.");
+              return;
+            }
+
+            // Validate blob type
+            if (!blob.type || !blob.type.startsWith('image/')) {
+              console.warn("Blob type is not an image:", blob.type);
+            }
+
             // Create file from blob
             const fileName = `task-${taskId}-${Date.now()}.jpg`;
             const file = new File([blob], fileName, { 
@@ -204,14 +212,28 @@ const TaskCompletion = ({ taskId, onComplete, isOpen, onClose }: TaskCompletionP
               lastModified: Date.now()
             });
 
-            // Validate file was created
+            // Validate file was created properly
             if (!file || file.size === 0) {
+              console.error("Created file is invalid:", { file, blobSize: blob.size });
               showError("Failed to create photo file. Please try again.");
+              return;
+            }
+
+            // Validate file size (should be reasonable)
+            if (file.size > 50 * 1024 * 1024) { // 50MB limit
+              showError("Photo is too large. Please try capturing again.");
               return;
             }
 
             // Create preview URL
             const previewUrl = URL.createObjectURL(blob);
+            
+            // Validate preview URL was created
+            if (!previewUrl) {
+              console.error("Failed to create preview URL");
+              showError("Failed to create photo preview. Please try again.");
+              return;
+            }
             
             // Set photo file and preview
             setPhotoFile(file);
@@ -219,9 +241,12 @@ const TaskCompletion = ({ taskId, onComplete, isOpen, onClose }: TaskCompletionP
             
             // Stop camera after successful capture
             stopCamera();
+            
+            console.log("Photo captured successfully:", { fileName, fileSize: file.size, blobSize: blob.size });
           } catch (fileError) {
             console.error("Error creating file:", fileError);
-            showError("Failed to process captured photo. Please try again.");
+            const errorMsg = fileError instanceof Error ? fileError.message : 'Unknown error';
+            showError(`Failed to process captured photo: ${errorMsg}. Please try again.`);
           }
         },
         "image/jpeg",
@@ -360,140 +385,13 @@ const TaskCompletion = ({ taskId, onComplete, isOpen, onClose }: TaskCompletionP
         throw new Error(`Failed to process image: ${compressionError instanceof Error ? compressionError.message : 'Unknown error'}`);
       }
 
-      // Upload using fetch API directly (more reliable than supabase.functions.invoke)
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-      const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY;
-      
-      if (!supabaseUrl || !anonKey) {
-        throw new Error('Supabase configuration missing. Please check your environment variables.');
-      }
-      
-      const functionUrl = `${supabaseUrl}/functions/v1/upload-task-photo`;
-      
-      // Retry function with exponential backoff
-      const uploadWithRetry = async (maxRetries: number = 3): Promise<any> => {
-        let lastError: any = null;
-        
-        for (let attempt = 0; attempt < maxRetries; attempt++) {
-          try {
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
-            
-            let response: Response;
-            try {
-              response = await fetch(functionUrl, {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                  'Authorization': `Bearer ${anonKey}`,
-                  'apikey': anonKey
-                },
-                body: JSON.stringify({
-                  taskId,
-                  path,
-                  fileType: 'image/jpeg',
-                  dataUrl: compressedDataUrl
-                }),
-                signal: controller.signal
-              });
-            } catch (fetchError: any) {
-              // Wrap fetch errors with more context
-              const fetchErrorMsg = fetchError?.message || String(fetchError);
-              const fetchErrorName = fetchError?.name || '';
-              
-              // Check if it's a network/connection error
-              if (fetchErrorName === 'TypeError' || fetchErrorName === 'NetworkError' ||
-                  fetchErrorMsg.includes('Failed to fetch') || fetchErrorMsg.includes('network') ||
-                  fetchErrorMsg.includes('ERR_')) {
-                const networkError = new Error('Unable to connect to server. Please check your internet connection and try again.');
-                (networkError as any).name = 'NetworkError';
-                throw networkError;
-              }
-              
-              // Re-throw other fetch errors
-              throw fetchError;
-            }
-            
-            clearTimeout(timeoutId);
-            
-            if (!response.ok) {
-              let errorText = '';
-              try {
-                const errorData = await response.json();
-                errorText = errorData.error || errorData.message || `HTTP ${response.status}`;
-              } catch (e) {
-                try {
-                  errorText = await response.text();
-                } catch (e2) {
-                  errorText = `HTTP ${response.status} ${response.statusText || ''}`;
-                }
-              }
-              throw new Error(`Upload failed: ${errorText}`);
-            }
-            
-            const result = await response.json();
-            
-            // Check if response contains error
-            if (result && typeof result === 'object' && 'error' in result) {
-              throw new Error(result.error as string);
-            }
-            
-            return result;
-          } catch (error: any) {
-            lastError = error;
-            const errorMsg = error?.message || String(error);
-            const errorName = error?.name || '';
-            
-            // Don't retry on validation errors, network errors (after first attempt), or aborted requests
-            if (errorMsg.includes('Invalid payload') || errorMsg.includes('Missing') || 
-                errorName === 'AbortError' || errorName === 'NetworkError') {
-              throw error;
-            }
-            
-            // If not the last attempt, wait and retry
-            if (attempt < maxRetries - 1) {
-              const delay = Math.min(1000 * Math.pow(2, attempt), 5000); // Max 5 seconds
-              console.warn(`Upload attempt ${attempt + 1} failed, retrying in ${delay}ms...`, errorMsg);
-              await new Promise(resolve => setTimeout(resolve, delay));
-              continue;
-            }
-          }
-        }
-        
-        throw lastError;
-      };
-
-      // Try direct storage upload first (faster, no Edge Function needed)
-      const directUploadToStorage = async (file: File, uploadPath: string): Promise<string> => {
-        const { data: uploadData, error: uploadError } = await supabase.storage
-          .from('task-photos')
-          .upload(uploadPath, file, {
-            contentType: 'image/jpeg',
-            upsert: true,
-            cacheControl: '3600'
-          });
-
-        if (uploadError) {
-          throw uploadError;
-        }
-
-        const { data: urlData } = supabase.storage
-          .from('task-photos')
-          .getPublicUrl(uploadPath);
-
-        if (!urlData?.publicUrl) {
-          throw new Error('Failed to get public URL after upload');
-        }
-
-        return urlData.publicUrl;
-      };
-
       let publicUrl: string;
       
-      // Try direct storage upload first (faster, no Edge Function dependency)
-      // If that fails due to RLS, fallback to Edge Function
+      // Direct storage upload (now possible after database policy fix)
       const uploadPhoto = async (): Promise<string> => {
-        // Create file from compressed data URL for direct upload
+        console.log('Uploading photo directly to storage...');
+        
+        // Create file from compressed data URL
         const base64Data = compressedDataUrl.split(',')[1];
         const binaryString = atob(base64Data);
         const bytes = new Uint8Array(binaryString.length);
@@ -504,33 +402,53 @@ const TaskCompletion = ({ taskId, onComplete, isOpen, onClose }: TaskCompletionP
         const uploadFile = new File([blob], photoFile.name || 'photo.jpg', { type: 'image/jpeg' });
         
         try {
-          // Try direct storage upload first
-          return await directUploadToStorage(uploadFile, path);
-        } catch (directError: any) {
-          const directErrorMsg = directError?.message || String(directError);
-          console.warn('Direct storage upload failed, trying Edge Function:', directErrorMsg);
+          // Upload directly to storage (policy now allows this)
+          console.log('Uploading to storage bucket:', path);
+          const { data: uploadData, error: uploadError } = await supabase.storage
+            .from('task-photos')
+            .upload(path, uploadFile, {
+              contentType: 'image/jpeg',
+              upsert: true,
+              cacheControl: '3600'
+            });
+
+          if (uploadError) {
+            console.error('Storage upload error:', uploadError);
+            throw uploadError;
+          }
+
+          // Get public URL
+          const { data: urlData } = supabase.storage
+            .from('task-photos')
+            .getPublicUrl(path);
+
+          if (!urlData?.publicUrl) {
+            throw new Error('Failed to get public URL after upload');
+          }
+
+          console.log('Photo uploaded successfully:', urlData.publicUrl);
+          return urlData.publicUrl;
           
-          // If it's a policy/permission error, try Edge Function
-          if (directErrorMsg.includes('policy') || directErrorMsg.includes('permission') || 
-              directErrorMsg.includes('unauthorized') || directErrorMsg.includes('Row Level Security')) {
-            // Fallback to Edge Function
-            try {
-              const uploadRes = await uploadWithRetry(3);
-              const edgeUrl = uploadRes?.publicUrl as string;
-              
-              if (!edgeUrl) {
-                throw new Error('Upload succeeded but no photo URL was returned');
-              }
-              
-              return edgeUrl;
-            } catch (edgeError: any) {
-              console.error('Edge Function upload also failed:', edgeError);
-              throw edgeError;
-            }
+        } catch (uploadError: any) {
+          console.error('Upload error:', uploadError);
+          
+          // Extract error message
+          const errorMsg = uploadError?.message || String(uploadError);
+          
+          // Check for network/connection errors
+          if (errorMsg.toLowerCase().includes('network') || 
+              errorMsg.toLowerCase().includes('failed to fetch') ||
+              errorMsg.toLowerCase().includes('connection')) {
+            throw new Error('Unable to connect to server. Please check your internet connection and try again.');
           }
           
-          // For other direct upload errors, throw them
-          throw directError;
+          // Check for policy/permission errors (shouldn't happen after migration)
+          if (errorMsg.includes('policy') || errorMsg.includes('permission') || 
+              errorMsg.includes('unauthorized') || errorMsg.includes('Row Level Security')) {
+            throw new Error('Upload permission denied. Please run the database migration to fix storage policies.');
+          }
+          
+          throw new Error(errorMsg || 'Upload failed. Please try again.');
         }
       };
       
@@ -540,6 +458,13 @@ const TaskCompletion = ({ taskId, onComplete, isOpen, onClose }: TaskCompletionP
         console.error('All upload methods failed:', finalError);
         const errorMsg = finalError?.message || 'Unknown error';
         const errorName = finalError?.name || '';
+        
+        // Check for Edge Function specific errors first
+        if (errorMsg.includes('Failed to send a request to the Edge Function') || 
+            errorMsg.includes('Edge Function') && errorMsg.includes('failed')) {
+          // This could be network, deployment, or configuration issue
+          throw new Error('Unable to connect to upload service. Please check your internet connection and try again. If the problem persists, contact support.');
+        }
         
         // Check for network/connection errors (more specific checks)
         const isNetworkError = 
@@ -580,6 +505,23 @@ const TaskCompletion = ({ taskId, onComplete, isOpen, onClose }: TaskCompletionP
           throw new Error('Connection blocked. Please contact support.');
         }
         
+        // Don't prefix errors that already have clear messages
+        const hasClearMessage = errorMsg.includes('Unable to connect') || 
+                                errorMsg.includes('timed out') ||
+                                errorMsg.includes('permission denied') ||
+                                errorMsg.includes('configuration error') ||
+                                errorMsg.includes('Failed to send a request') ||
+                                errorMsg.includes('Edge Function') ||
+                                errorMsg.startsWith('Upload failed:') ||
+                                errorMsg.startsWith('Upload service') ||
+                                errorMsg.length > 80; // Already descriptive
+        
+        if (hasClearMessage) {
+          // Don't modify error messages that are already user-friendly
+          throw new Error(errorMsg.length > 150 ? errorMsg.substring(0, 147) + '...' : errorMsg);
+        }
+        
+        // For generic errors, add prefix
         throw new Error(`Upload failed: ${errorMsg.length > 100 ? 'Please try again' : errorMsg}`);
       }
 
@@ -754,7 +696,6 @@ const TaskCompletion = ({ taskId, onComplete, isOpen, onClose }: TaskCompletionP
               playsInline
               muted
               className="w-full rounded-lg bg-black max-h-64 sm:max-h-96"
-              style={{ transform: 'scaleX(-1)' }} // Mirror the video for better UX
             />
             <div className="flex flex-col sm:flex-row gap-2">
               <Button onClick={capturePhoto} className="flex-1 bg-success hover:bg-success/90" size="sm">
