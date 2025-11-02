@@ -1,4 +1,4 @@
-# 🧪 WhatsApp Testing Guide - Phone: 0755682782
+# 🧪 WhatsApp Testing Guide - Phone: 0755681782
 
 ## ✅ Changes Applied
 
@@ -18,7 +18,7 @@
 
 ```sql
 UPDATE employees 
-SET phone = '0755682782'
+SET phone = '0755681782'
 WHERE email = 'your-email@example.com';
 ```
 
@@ -27,7 +27,7 @@ WHERE email = 'your-email@example.com';
 ```sql
 SELECT id, name, email, role, phone
 FROM employees
-WHERE phone = '0755682782';
+WHERE phone = '0755681782';
 ```
 
 ### Option B: Via Supabase Table Editor
@@ -36,7 +36,7 @@ WHERE phone = '0755682782';
 2. Select `employees` table
 3. Find your employee record
 4. Click on the `phone` column
-5. Enter: `0755682782`
+5. Enter: `0755681782`
 6. Save
 
 ---
@@ -62,20 +62,20 @@ http://localhost:8080/test-whatsapp.html
 
 4. Click "Test Serverless" button
 
-5. Check your WhatsApp at **0755682782** for the message!
+5. Check your WhatsApp at **0755681782** for the message!
 
 ### Method 2: Via Task Assignment
 
 1. Login to the app: `http://localhost:8080`
 
 2. **If testing Admin → Dept Head:**
-   - Make sure department head has phone `0755682782`
+   - Make sure department head has phone `0755681782`
    - Go to Admin → Task Assignment
    - Create and assign task to dept head
    - Check WhatsApp
 
 3. **If testing Dept Head → Employee:**
-   - Make sure employee has phone `0755682782`
+   - Make sure employee has phone `0755681782`
    - Go to Department Head → Tasks
    - Create and assign task to employee
    - Check WhatsApp
@@ -98,8 +98,8 @@ function formatPhoneNumber(phone) {
     return cleaned;
 }
 
-console.log('Testing phone: 0755682782');
-console.log('Formatted:', formatPhoneNumber('0755682782'));
+console.log('Testing phone: 0755681782');
+console.log('Formatted:', formatPhoneNumber('0755681782'));
 // Should output: 94755681782
 
 // Test serverless function
@@ -107,7 +107,7 @@ fetch('/api/send-whatsapp', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-        number: '0755682782',
+        number: '0755681782',
         type: 'text',
         message: 'Test from Browser Console - Task Management System'
     })
@@ -125,7 +125,7 @@ When assigning a task, you should see these logs in the browser console:
 
 ```
 🔍 Fetching phone for employee: [employee-id]
-📞 Raw phone from database: 0755682782
+📞 Raw phone from database: 0755681782
 📱 Formatted phone: 94755681782
 ✅ Phone found, sending WhatsApp to: 94755681782
 📱 Sending WhatsApp message to: 94755681782
@@ -166,11 +166,11 @@ If WhatsApp not received, check:
 -- Check if phone exists
 SELECT id, name, email, role, phone, is_active
 FROM employees
-WHERE phone = '0755682782' OR phone LIKE '%755682782%';
+WHERE phone = '0755681782' OR phone LIKE '%755682782%';
 
 -- If empty, add it
 UPDATE employees 
-SET phone = '0755682782'
+SET phone = '0755681782'
 WHERE email = 'your@email.com';
 ```
 
@@ -205,7 +205,7 @@ vercel logs --follow
 ### Test 1: Format Phone Number
 ```javascript
 // Should convert to 94755681782
-formatPhoneNumber('0755682782')   // → 94755681782
+formatPhoneNumber('0755681782')   // → 94755681782
 formatPhoneNumber('755682782')    // → 94755681782
 formatPhoneNumber('94755681782')  // → 94755681782
 ```
@@ -224,11 +224,11 @@ Invoke-WebRequest -Uri "https://api.geekhirusha.com/emptaskmanagement.php?number
 # Using curl
 curl -X POST http://localhost:8080/api/send-whatsapp \
   -H "Content-Type: application/json" \
-  -d '{"number":"0755682782","type":"text","message":"Test"}'
+  -d '{"number":"0755681782","type":"text","message":"Test"}'
 
 # Or using PowerShell
 $body = @{
-    number = "0755682782"
+    number = "0755681782"
     type = "text"
     message = "Test from PowerShell"
 } | ConvertTo-Json
@@ -286,7 +286,7 @@ _Task Management System_
 - ✅ Response: `{"success": true, ...}`
 
 ### On Phone:
-- ✅ WhatsApp message received at 0755682782
+- ✅ WhatsApp message received at 0755681782
 
 ---
 
@@ -308,7 +308,7 @@ vercel logs --follow
 # Test endpoint
 curl -X POST https://your-app.vercel.app/api/send-whatsapp \
   -H "Content-Type: application/json" \
-  -d '{"number":"0755682782","type":"text","message":"Test from Vercel"}'
+  -d '{"number":"0755681782","type":"text","message":"Test from Vercel"}'
 ```
 
 ---
@@ -317,14 +317,14 @@ curl -X POST https://your-app.vercel.app/api/send-whatsapp \
 
 If still not working:
 
-1. **Check Database**: Phone = `0755682782` ✅
+1. **Check Database**: Phone = `0755681782` ✅
 2. **Check Console**: Logs show phone fetched ✅
 3. **Check Network**: API called successfully ✅
-4. **Check Phone**: Correct number 0755682782 ✅
+4. **Check Phone**: Correct number 0755681782 ✅
 5. **Check Vercel Logs**: If deployed ✅
 
 ---
 
-**Test Phone**: 0755682782  
+**Test Phone**: 0755681782  
 **Formatted**: 94755681782  
 **Status**: Ready for testing! 🎉

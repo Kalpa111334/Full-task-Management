@@ -1,8 +1,8 @@
 # WhatsApp Test Script for PowerShell
-# Tests phone number: 0755682782
+# Tests phone number: 0755681782
 
 Write-Host "📱 WhatsApp API Test Script" -ForegroundColor Green
-Write-Host "Testing phone: 0755682782" -ForegroundColor Cyan
+Write-Host "Testing phone: 0755681782" -ForegroundColor Cyan
 Write-Host ""
 
 # Test 1: Direct API (works on localhost)
@@ -31,7 +31,7 @@ Write-Host "Test 2: Serverless Function (localhost)" -ForegroundColor Yellow
 Write-Host "----------------------------------------" -ForegroundColor Yellow
 
 $body = @{
-    number = "0755682782"
+    number = "0755681782"
     type = "text"
     message = "Test from PowerShell Serverless - Task Management System"
 } | ConvertTo-Json
@@ -62,7 +62,7 @@ $vercelUrl = Read-Host "Enter your Vercel URL (or press Enter to skip)"
 
 if ($vercelUrl) {
     $body = @{
-        number = "0755682782"
+        number = "0755681782"
         type = "text"
         message = "Test from PowerShell to Vercel - Task Management System"
     } | ConvertTo-Json
@@ -85,4 +85,4 @@ if ($vercelUrl) {
 Write-Host ""
 Write-Host ""
 Write-Host "✅ Testing Complete!" -ForegroundColor Green
-Write-Host "Check WhatsApp at 0755682782 for messages" -ForegroundColor Cyan
+Write-Host "Check WhatsApp at 0755681782 for messages" -ForegroundColor Cyan
