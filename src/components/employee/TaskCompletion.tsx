@@ -163,6 +163,85 @@ const TaskCompletion = ({ taskId, onComplete, isOpen, onClose }: TaskCompletionP
 
   // No gallery uploads allowed — enforce real-time camera capture only
 
+  // Compress and resize image before upload to reduce payload size
+  const compressImage = (file: File, maxWidth: number = 1280, quality: number = 0.8): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      try {
+        if (!file || !(file instanceof File)) {
+          reject(new Error('Invalid file provided'));
+          return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          try {
+            const result = e.target?.result;
+            if (!result || typeof result !== 'string') {
+              reject(new Error('Failed to read file'));
+              return;
+            }
+
+            const img = new Image();
+            img.onload = () => {
+              try {
+                const canvas = document.createElement('canvas');
+                let width = img.width;
+                let height = img.height;
+                
+                // Resize if too large
+                if (width > maxWidth) {
+                  height = (height * maxWidth) / width;
+                  width = maxWidth;
+                }
+                
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                if (!ctx) {
+                  reject(new Error('Failed to create canvas context'));
+                  return;
+                }
+                
+                ctx.drawImage(img, 0, 0, width, height);
+                canvas.toBlob(
+                  (blob) => {
+                    if (!blob) {
+                      reject(new Error('Failed to compress image'));
+                      return;
+                    }
+                    const reader2 = new FileReader();
+                    reader2.onload = () => {
+                      const result2 = reader2.result;
+                      if (result2 && typeof result2 === 'string') {
+                        resolve(result2);
+                      } else {
+                        reject(new Error('Failed to read compressed image'));
+                      }
+                    };
+                    reader2.onerror = () => reject(new Error('Failed to read compressed image'));
+                    reader2.readAsDataURL(blob);
+                  },
+                  'image/jpeg',
+                  quality
+                );
+              } catch (canvasError) {
+                reject(new Error(`Image processing failed: ${canvasError instanceof Error ? canvasError.message : 'Unknown error'}`));
+              }
+            };
+            img.onerror = () => reject(new Error('Failed to load image'));
+            img.src = result;
+          } catch (loadError) {
+            reject(new Error(`Failed to process file: ${loadError instanceof Error ? loadError.message : 'Unknown error'}`));
+          }
+        };
+        reader.onerror = () => reject(new Error('Failed to read photo file'));
+        reader.readAsDataURL(file);
+      } catch (error) {
+        reject(new Error(`Compression failed: ${error instanceof Error ? error.message : 'Unknown error'}`));
+      }
+    });
+  };
+
   const handleSubmit = async () => {
     if (!photoFile) {
       showError("Please capture or upload a photo");
@@ -188,58 +267,26 @@ const TaskCompletion = ({ taskId, onComplete, isOpen, onClose }: TaskCompletionP
         throw new Error('Task not found');
       }
 
-      // Compress and resize image before upload to reduce payload size
-      const compressImage = (file: File, maxWidth: number = 1280, quality: number = 0.8): Promise<string> => {
-        return new Promise((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = (e) => {
-            const img = new Image();
-            img.onload = () => {
-              const canvas = document.createElement('canvas');
-              let width = img.width;
-              let height = img.height;
-              
-              // Resize if too large
-              if (width > maxWidth) {
-                height = (height * maxWidth) / width;
-                width = maxWidth;
-              }
-              
-              canvas.width = width;
-              canvas.height = height;
-              const ctx = canvas.getContext('2d');
-              if (!ctx) {
-                reject(new Error('Failed to create canvas context'));
-                return;
-              }
-              
-              ctx.drawImage(img, 0, 0, width, height);
-              canvas.toBlob(
-                (blob) => {
-                  if (!blob) {
-                    reject(new Error('Failed to compress image'));
-                    return;
-                  }
-                  const reader2 = new FileReader();
-                  reader2.onload = () => resolve(reader2.result as string);
-                  reader2.onerror = () => reject(new Error('Failed to read compressed image'));
-                  reader2.readAsDataURL(blob);
-                },
-                'image/jpeg',
-                quality
-              );
-            };
-            img.onerror = () => reject(new Error('Failed to load image'));
-            img.src = e.target?.result as string;
-          };
-          reader.onerror = () => reject(new Error('Failed to read photo file'));
-          reader.readAsDataURL(file);
-        });
-      };
+      // Validate photo file
+      if (!(photoFile instanceof File)) {
+        throw new Error('Invalid photo file');
+      }
 
       // Upload via Edge Function with retry logic
       const path = `${taskId}/${Date.now()}-${photoFile.name}`;
-      const compressedDataUrl = await compressImage(photoFile);
+      
+      let compressedDataUrl: string;
+      try {
+        compressedDataUrl = await compressImage(photoFile);
+        
+        // Validate compressed data URL
+        if (!compressedDataUrl || typeof compressedDataUrl !== 'string' || !compressedDataUrl.startsWith('data:')) {
+          throw new Error('Image compression failed. Please try again.');
+        }
+      } catch (compressionError) {
+        console.error('Image compression error:', compressionError);
+        throw new Error(`Failed to process image: ${compressionError instanceof Error ? compressionError.message : 'Unknown error'}`);
+      }
 
       // Retry function with exponential backoff
       const invokeWithRetry = async (maxRetries: number = 3): Promise<any> => {
@@ -448,10 +495,27 @@ const TaskCompletion = ({ taskId, onComplete, isOpen, onClose }: TaskCompletionP
       onClose();
     } catch (error) {
       console.error('Task completion error:', error);
-      const errorMessage = error instanceof Error 
-        ? error.message 
-        : 'Failed to complete task. Please try again.';
-      showError(errorMessage.length > 100 ? 'Failed to complete task. Please try again.' : errorMessage);
+      
+      let errorMessage = 'Failed to complete task. Please try again.';
+      
+      if (error instanceof Error) {
+        errorMessage = error.message;
+      } else if (typeof error === 'string') {
+        errorMessage = error;
+      } else if (error && typeof error === 'object' && 'message' in error) {
+        errorMessage = String(error.message);
+      }
+      
+      // Truncate very long error messages for UI
+      if (errorMessage.length > 150) {
+        errorMessage = errorMessage.substring(0, 147) + '...';
+      }
+      
+      // Show error to user
+      showError(errorMessage);
+      
+      // Don't close dialog on error so user can retry
+      // Only reset uploading state
     } finally {
       setIsUploading(false);
     }
