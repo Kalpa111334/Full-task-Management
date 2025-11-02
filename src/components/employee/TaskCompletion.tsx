@@ -379,21 +379,40 @@ const TaskCompletion = ({ taskId, onComplete, isOpen, onClose }: TaskCompletionP
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
             
-            const response = await fetch(functionUrl, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${anonKey}`,
-                'apikey': anonKey
-              },
-              body: JSON.stringify({
-                taskId,
-                path,
-                fileType: 'image/jpeg',
-                dataUrl: compressedDataUrl
-              }),
-              signal: controller.signal
-            });
+            let response: Response;
+            try {
+              response = await fetch(functionUrl, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${anonKey}`,
+                  'apikey': anonKey
+                },
+                body: JSON.stringify({
+                  taskId,
+                  path,
+                  fileType: 'image/jpeg',
+                  dataUrl: compressedDataUrl
+                }),
+                signal: controller.signal
+              });
+            } catch (fetchError: any) {
+              // Wrap fetch errors with more context
+              const fetchErrorMsg = fetchError?.message || String(fetchError);
+              const fetchErrorName = fetchError?.name || '';
+              
+              // Check if it's a network/connection error
+              if (fetchErrorName === 'TypeError' || fetchErrorName === 'NetworkError' ||
+                  fetchErrorMsg.includes('Failed to fetch') || fetchErrorMsg.includes('network') ||
+                  fetchErrorMsg.includes('ERR_')) {
+                const networkError = new Error('Unable to connect to server. Please check your internet connection and try again.');
+                (networkError as any).name = 'NetworkError';
+                throw networkError;
+              }
+              
+              // Re-throw other fetch errors
+              throw fetchError;
+            }
             
             clearTimeout(timeoutId);
             
@@ -406,7 +425,7 @@ const TaskCompletion = ({ taskId, onComplete, isOpen, onClose }: TaskCompletionP
                 try {
                   errorText = await response.text();
                 } catch (e2) {
-                  errorText = `HTTP ${response.status}`;
+                  errorText = `HTTP ${response.status} ${response.statusText || ''}`;
                 }
               }
               throw new Error(`Upload failed: ${errorText}`);
@@ -423,9 +442,11 @@ const TaskCompletion = ({ taskId, onComplete, isOpen, onClose }: TaskCompletionP
           } catch (error: any) {
             lastError = error;
             const errorMsg = error?.message || String(error);
+            const errorName = error?.name || '';
             
-            // Don't retry on validation errors or aborted requests
-            if (errorMsg.includes('Invalid payload') || errorMsg.includes('Missing') || error.name === 'AbortError') {
+            // Don't retry on validation errors, network errors (after first attempt), or aborted requests
+            if (errorMsg.includes('Invalid payload') || errorMsg.includes('Missing') || 
+                errorName === 'AbortError' || errorName === 'NetworkError') {
               throw error;
             }
             
@@ -518,22 +539,45 @@ const TaskCompletion = ({ taskId, onComplete, isOpen, onClose }: TaskCompletionP
       } catch (finalError: any) {
         console.error('All upload methods failed:', finalError);
         const errorMsg = finalError?.message || 'Unknown error';
+        const errorName = finalError?.name || '';
         
-        // Check for network/connection errors
-        if (errorMsg.includes('Failed to fetch') || errorMsg.includes('network') || 
-            errorMsg.includes('NetworkError') || errorMsg.includes('Network request failed') ||
-            finalError?.name === 'TypeError' || finalError?.name === 'AbortError') {
+        // Check for network/connection errors (more specific checks)
+        const isNetworkError = 
+          errorMsg.includes('Failed to fetch') || 
+          errorMsg.includes('NetworkError') || 
+          errorMsg.includes('Network request failed') ||
+          errorMsg.includes('ERR_INTERNET_DISCONNECTED') ||
+          errorMsg.includes('ERR_NETWORK_CHANGED') ||
+          errorMsg.includes('ERR_CONNECTION_REFUSED') ||
+          errorMsg.includes('ERR_CONNECTION_RESET') ||
+          errorMsg.includes('ERR_CONNECTION_TIMED_OUT') ||
+          (errorName === 'TypeError' && (errorMsg.includes('fetch') || errorMsg.includes('network'))) ||
+          (errorName === 'AbortError' && errorMsg.includes('timeout'));
+        
+        if (isNetworkError) {
           throw new Error('Unable to connect to server. Please check your internet connection and try again.');
         }
         
+        // Check for timeout errors (but not network-related)
+        if (errorName === 'AbortError' || errorMsg.includes('timeout')) {
+          throw new Error('Upload timed out. The file may be too large. Please try again.');
+        }
+        
         // Check for configuration errors
-        if (errorMsg.includes('configuration') || errorMsg.includes('missing') || errorMsg.includes('not configured')) {
+        if (errorMsg.includes('configuration') || errorMsg.includes('missing') || errorMsg.includes('not configured') || 
+            errorMsg.includes('Supabase configuration missing') || errorMsg.includes('Supabase Configurations missing')) {
           throw new Error('Server configuration error. Please contact support.');
         }
         
         // Check for storage policy errors
-        if (errorMsg.includes('policy') || errorMsg.includes('permission') || errorMsg.includes('unauthorized')) {
+        if (errorMsg.includes('policy') || errorMsg.includes('permission') || errorMsg.includes('unauthorized') ||
+            errorMsg.includes('Row Level Security') || errorMsg.includes('RLS')) {
           throw new Error('Upload permission denied. Please contact support.');
+        }
+        
+        // Check for CORS errors
+        if (errorMsg.includes('CORS') || errorMsg.includes('cross-origin') || errorMsg.includes('Access-Control')) {
+          throw new Error('Connection blocked. Please contact support.');
         }
         
         throw new Error(`Upload failed: ${errorMsg.length > 100 ? 'Please try again' : errorMsg}`);
