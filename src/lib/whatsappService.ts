@@ -6,7 +6,7 @@ import { supabase } from '@/integrations/supabase/client';
  * Works on both localhost and Vercel
  */
 
-const WHATSAPP_API_BASE_URL = 'http://api.geekhirusha.com/emptaskmanagement.php';
+const WHATSAPP_API_BASE_URL = 'https://api.geekhirusha.com/emptaskmanagement.php';
 
 export type WhatsAppMessageType = 'text' | 'image' | 'video' | 'audio' | 'pdf';
 

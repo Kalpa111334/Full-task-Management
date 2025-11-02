@@ -54,7 +54,7 @@ Click "Send Test WhatsApp" button.
 ✅ Phone found, sending WhatsApp to: 94755682782
 📱 Sending WhatsApp message to: 94755682782
 📝 Message preview: 🎯 *New Task Assigned*...
-🌐 API URL: http://api.geekhirusha.com/emptaskmanagement.php?number=94755682782...
+🌐 API URL: https://api.geekhirusha.com/emptaskmanagement.php?number=94755682782...
 ✅ WhatsApp API request sent (no-cors mode)
 📱 WhatsApp should be delivered to: 94755682782
 ```
@@ -93,7 +93,7 @@ Click "Send Test WhatsApp" button.
 📝 Message preview: 🎯 *New Task Assigned*
 
 Hello! You have...
-🌐 API URL: http://api.geekhirusha.com/emptaskmanagement.php?number=94755682782&type=text&message=...
+🌐 API URL: https://api.geekhirusha.com/emptaskmanagement.php?number=94755682782&type=text&message=...
 ✅ WhatsApp API request sent (no-cors mode)
 📱 WhatsApp should be delivered to: 94755682782
 📱 WhatsApp notification result: ✅ Sent
@@ -117,7 +117,7 @@ Hello! You have...
 
 ### Test 1: Direct API (Browser)
 
-Open: http://api.geekhirusha.com/emptaskmanagement.php?number=94755682782&type=text&message=Test
+Open: https://api.geekhirusha.com/emptaskmanagement.php?number=94755682782&type=text&message=Test
 
 ### Test 2: Quick Test Page
 
@@ -133,7 +133,7 @@ Open browser console (F12) and paste:
 async function testWhatsApp() {
     const phone = '94755682782';
     const message = 'Test from Console';
-    const url = `http://api.geekhirusha.com/emptaskmanagement.php?number=${phone}&type=text&message=${encodeURIComponent(message)}`;
+    const url = `https://api.geekhirusha.com/emptaskmanagement.php?number=${phone}&type=text&message=${encodeURIComponent(message)}`;
     
     console.log('📱 Sending to:', phone);
     console.log('🌐 URL:', url);
@@ -193,7 +193,7 @@ Open F12 → Console tab. Should see the log messages above.
 Console should show: `94755682782` (NOT `940755682782`)
 
 ### 4. Test API Directly
-Open: http://api.geekhirusha.com/emptaskmanagement.php?number=94755682782&type=text&message=DirectTest
+Open: https://api.geekhirusha.com/emptaskmanagement.php?number=94755682782&type=text&message=DirectTest
 
 ### 5. Check Network
 F12 → Network tab → Filter: "geekhirusha"
