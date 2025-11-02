@@ -237,32 +237,114 @@ const TaskCompletion = ({ taskId, onComplete, isOpen, onClose }: TaskCompletionP
         });
       };
 
-      // Upload via Edge Function (direct upload won't work due to RLS policy requiring auth.uid())
+      // Upload via Edge Function with retry logic
       const path = `${taskId}/${Date.now()}-${photoFile.name}`;
       const compressedDataUrl = await compressImage(photoFile);
 
-      const { data: uploadRes, error: funcError } = await supabase.functions.invoke('upload-task-photo', {
-        body: { 
-          taskId, 
-          path, 
-          fileType: 'image/jpeg', 
-          dataUrl: compressedDataUrl 
+      // Retry function with exponential backoff
+      const invokeWithRetry = async (maxRetries: number = 3): Promise<any> => {
+        let lastError: any = null;
+        
+        for (let attempt = 0; attempt < maxRetries; attempt++) {
+          try {
+            // Try using Supabase function invoke first
+            const { data: uploadRes, error: funcError } = await supabase.functions.invoke('upload-task-photo', {
+              body: { 
+                taskId, 
+                path, 
+                fileType: 'image/jpeg', 
+                dataUrl: compressedDataUrl 
+              }
+            });
+            
+            if (funcError) {
+              throw funcError;
+            }
+            
+            if (uploadRes && typeof uploadRes === 'object' && 'error' in uploadRes) {
+              throw new Error(uploadRes.error as string);
+            }
+            
+            return uploadRes;
+          } catch (error: any) {
+            lastError = error;
+            const errorMsg = error?.message || String(error);
+            
+            // Don't retry on validation errors
+            if (errorMsg.includes('Invalid payload') || errorMsg.includes('Missing')) {
+              throw error;
+            }
+            
+            // If not the last attempt, wait and retry
+            if (attempt < maxRetries - 1) {
+              const delay = Math.min(1000 * Math.pow(2, attempt), 5000); // Max 5 seconds
+              console.warn(`Upload attempt ${attempt + 1} failed, retrying in ${delay}ms...`, errorMsg);
+              await new Promise(resolve => setTimeout(resolve, delay));
+              continue;
+            }
+          }
         }
-      });
-      
-      if (funcError) {
-        console.error('Function error:', funcError);
-        // Provide user-friendly error message
-        const errorMsg = funcError.message || 'Unknown error';
-        if (errorMsg.includes('Failed to send') || errorMsg.includes('network') || errorMsg.includes('fetch')) {
-          throw new Error('Unable to connect to server. Please check your internet connection and try again.');
+        
+        throw lastError;
+      };
+
+      // Try alternative method using fetch API if Supabase invoke fails
+      const uploadViaFetch = async (): Promise<any> => {
+        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+        const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+        
+        if (!supabaseUrl || !anonKey) {
+          throw new Error('Supabase configuration missing');
         }
-        throw new Error(`Upload failed: ${errorMsg}`);
-      }
-      
-      // Check if the response contains an error
-      if (uploadRes && typeof uploadRes === 'object' && 'error' in uploadRes) {
-        throw new Error(`Upload failed: ${uploadRes.error}`);
+        
+        const functionUrl = `${supabaseUrl}/functions/v1/upload-task-photo`;
+        const response = await fetch(functionUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${anonKey}`,
+            'apikey': anonKey
+          },
+          body: JSON.stringify({
+            taskId,
+            path,
+            fileType: 'image/jpeg',
+            dataUrl: compressedDataUrl
+          })
+        });
+        
+        if (!response.ok) {
+          let errorText = '';
+          try {
+            errorText = await response.text();
+          } catch (e) {
+            errorText = `HTTP ${response.status}`;
+          }
+          throw new Error(`Upload failed: ${response.status} ${errorText}`);
+        }
+        
+        return await response.json();
+      };
+
+      let uploadRes: any;
+      try {
+        // Try with retry logic first
+        uploadRes = await invokeWithRetry(3);
+      } catch (primaryError: any) {
+        console.warn('Primary upload method failed, trying fetch API:', primaryError);
+        try {
+          // Fallback to fetch API
+          uploadRes = await uploadViaFetch();
+        } catch (fetchError: any) {
+          console.error('Both upload methods failed:', { primaryError, fetchError });
+          const errorMsg = fetchError?.message || primaryError?.message || 'Unknown error';
+          
+          if (errorMsg.includes('Failed to send') || errorMsg.includes('network') || errorMsg.includes('fetch') || errorMsg.includes('Failed to fetch')) {
+            throw new Error('Unable to connect to server. Please check your internet connection and try again.');
+          }
+          
+          throw new Error(`Upload failed: ${errorMsg}`);
+        }
       }
       
       const publicUrl = uploadRes?.publicUrl as string;
