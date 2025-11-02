@@ -369,97 +369,97 @@ const EmployeeTaskList = ({ employeeId }: EmployeeTaskListProps) => {
       {completedTasks.length > 0 && (
         <div className="mt-6 pt-6 border-t">
           <h3 className="text-sm sm:text-base font-semibold mb-4 text-muted-foreground">Completed Tasks</h3>
-          <div className="grid gap-3 sm:gap-4">
+      <div className="grid gap-3 sm:gap-4">
             {completedTasks.map((task) => (
               <Card 
                 key={task.id} 
                 className="p-4 sm:p-6 hover:shadow-lg transition-all animate-fade-in cursor-pointer"
                 onClick={() => navigate(`/task/${task.id}`)}
               >
-                <div className="flex items-start justify-between mb-3 sm:mb-4">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-2">
-                      <h3 className="font-semibold text-sm sm:text-lg truncate">{task.title}</h3>
-                      <div className="flex gap-1 sm:gap-2">
-                        <Badge className={`${getPriorityColor(task.priority)} text-xs`}>
-                          {task.priority}
-                        </Badge>
-                        <Badge className={`${getStatusColor(task.status)} text-xs`}>
-                          {task.status.replace("_", " ")}
-                        </Badge>
-                      </div>
-                    </div>
-                    {task.description && (
-                      <p className="text-xs sm:text-sm text-muted-foreground mb-3 line-clamp-2">{task.description}</p>
-                    )}
+            <div className="flex items-start justify-between mb-3 sm:mb-4">
+              <div className="flex-1 min-w-0">
+                <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-2">
+                  <h3 className="font-semibold text-sm sm:text-lg truncate">{task.title}</h3>
+                  <div className="flex gap-1 sm:gap-2">
+                    <Badge className={`${getPriorityColor(task.priority)} text-xs`}>
+                      {task.priority}
+                    </Badge>
+                    <Badge className={`${getStatusColor(task.status)} text-xs`}>
+                      {task.status.replace("_", " ")}
+                    </Badge>
                   </div>
                 </div>
+                {task.description && (
+                  <p className="text-xs sm:text-sm text-muted-foreground mb-3 line-clamp-2">{task.description}</p>
+                )}
+              </div>
+            </div>
 
-                <div className="space-y-2 mb-3 sm:mb-4">
-                  {task.location_address && (
-                    <div className="flex items-center gap-2 text-xs sm:text-sm text-muted-foreground">
-                      <MapPin className="h-3 w-3 sm:h-4 sm:w-4 flex-shrink-0" />
-                      <span className="truncate">{task.location_address}</span>
-                    </div>
-                  )}
-                  {task.deadline && (
-                    <div className="flex items-center gap-2 text-xs sm:text-sm text-muted-foreground">
-                      <Clock className="h-3 w-3 sm:h-4 sm:w-4 flex-shrink-0" />
-                      <span>Due: {format(new Date(task.deadline), "PP")}</span>
-                    </div>
-                  )}
+            <div className="space-y-2 mb-3 sm:mb-4">
+              {task.location_address && (
+                <div className="flex items-center gap-2 text-xs sm:text-sm text-muted-foreground">
+                  <MapPin className="h-3 w-3 sm:h-4 sm:w-4 flex-shrink-0" />
+                  <span className="truncate">{task.location_address}</span>
                 </div>
+              )}
+              {task.deadline && (
+                <div className="flex items-center gap-2 text-xs sm:text-sm text-muted-foreground">
+                  <Clock className="h-3 w-3 sm:h-4 sm:w-4 flex-shrink-0" />
+                  <span>Due: {format(new Date(task.deadline), "PP")}</span>
+                </div>
+              )}
+            </div>
 
-                <div className="flex flex-col sm:flex-row gap-2">
-                  {task.status === "pending" && (
-                    <>
-                      <Button
-                        size="sm"
+            <div className="flex flex-col sm:flex-row gap-2">
+              {task.status === "pending" && (
+                <>
+                  <Button
+                    size="sm"
                         onClick={(e) => {
                           e.stopPropagation();
                           startTask(task.id, task.is_active);
                         }}
-                        disabled={!task.is_active}
-                        className="bg-primary w-full sm:w-auto disabled:opacity-50"
-                      >
-                        <Play className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-2" />
-                        {task.is_active ? "Start Task" : "Task Inactive"}
-                      </Button>
-                      {!task.is_active && (
-                        <p className="text-xs text-muted-foreground">
-                          This task has been deactivated by management
-                        </p>
-                      )}
-                    </>
+                    disabled={!task.is_active}
+                    className="bg-primary w-full sm:w-auto disabled:opacity-50"
+                  >
+                    <Play className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-2" />
+                    {task.is_active ? "Start Task" : "Task Inactive"}
+                  </Button>
+                  {!task.is_active && (
+                    <p className="text-xs text-muted-foreground">
+                      This task has been deactivated by management
+                    </p>
                   )}
-                  {task.status === "in_progress" && (
-                    <Button
-                      size="sm"
+                </>
+              )}
+              {task.status === "in_progress" && (
+                <Button
+                  size="sm"
                       onClick={(e) => {
                         e.stopPropagation();
                         setCompletingTaskId(task.id);
                       }}
-                      className="bg-success w-full sm:w-auto"
-                    >
-                      <Camera className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-2" />
-                      Complete with Photo
-                    </Button>
-                  )}
-                </div>
-              </Card>
-            ))}
+                  className="bg-success w-full sm:w-auto"
+                >
+                  <Camera className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-2" />
+                  Complete with Photo
+                </Button>
+              )}
+            </div>
+          </Card>
+        ))}
           </div>
         </div>
       )}
 
-      {filteredTasks.length === 0 && (
-        <Card className="p-12 text-center">
-          <AlertCircle className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-          <p className="text-muted-foreground">
-            {filter === "all" ? "No tasks assigned yet" : `No ${filter.replace("_", " ")} tasks`}
-          </p>
-        </Card>
-      )}
+        {filteredTasks.length === 0 && (
+          <Card className="p-12 text-center">
+            <AlertCircle className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+            <p className="text-muted-foreground">
+              {filter === "all" ? "No tasks assigned yet" : `No ${filter.replace("_", " ")} tasks`}
+            </p>
+          </Card>
+        )}
 
       {completingTaskId && (
         <TaskCompletion

@@ -338,3 +338,119 @@ export const notifyTaskStatusUpdate = async (
     message,
   });
 };
+
+/**
+ * Notification: Task proof received - notify department head when employee submits completion proof
+ */
+export const notifyDeptHeadTaskProofReceived = async (
+  taskTitle: string,
+  deptHeadId: string,
+  employeeName: string,
+  taskId: string
+): Promise<boolean> => {
+  console.log('📨 Starting WhatsApp notification for dept head - task proof received:', deptHeadId);
+  
+  const phone = await getEmployeePhone(deptHeadId);
+  if (!phone) {
+    console.warn('⚠️ No phone number found for department head:', deptHeadId);
+    return false;
+  }
+
+  console.log('✅ Phone found, sending WhatsApp to:', phone);
+
+  const taskUrl = getTaskUrl(taskId);
+
+  let message = `📸 *Task Proof Received*\n\n` +
+    `Hello! *${employeeName}* has submitted completion proof for a task.\n\n` +
+    `📋 *Task:* ${taskTitle}\n\n` +
+    `🔗 *Click here to review the task:*\n${taskUrl}\n\n` +
+    `Please review the completion proof and approve or reject the task.\n\n` +
+    `_Task Management System_`;
+
+  const result = await sendWhatsAppMessage({
+    number: phone,
+    type: 'text',
+    message,
+  });
+
+  console.log('📱 WhatsApp notification result:', result ? '✅ Sent' : '❌ Failed');
+  return result;
+};
+
+/**
+ * Notification: Task approved - notify employee when department head approves their task
+ */
+export const notifyEmployeeTaskApproved = async (
+  taskTitle: string,
+  employeeId: string,
+  approverName: string,
+  taskId: string
+): Promise<boolean> => {
+  console.log('📨 Starting WhatsApp notification for employee - task approved:', employeeId);
+  
+  const phone = await getEmployeePhone(employeeId);
+  if (!phone) {
+    console.warn('⚠️ No phone number found for employee:', employeeId);
+    return false;
+  }
+
+  console.log('✅ Phone found, sending WhatsApp to:', phone);
+
+  const taskUrl = getTaskUrl(taskId);
+
+  let message = `🎉 *Task Approved*\n\n` +
+    `Great news! Your task has been approved by *${approverName}*.\n\n` +
+    `📋 *Task:* ${taskTitle}\n\n` +
+    `🔗 *Click here to view the task:*\n${taskUrl}\n\n` +
+    `Well done! The task has been marked as completed and approved.\n\n` +
+    `_Task Management System_`;
+
+  const result = await sendWhatsAppMessage({
+    number: phone,
+    type: 'text',
+    message,
+  });
+
+  console.log('📱 WhatsApp notification result:', result ? '✅ Sent' : '❌ Failed');
+  return result;
+};
+
+/**
+ * Notification: Task rejected - notify employee when department head rejects their task
+ */
+export const notifyEmployeeTaskRejected = async (
+  taskTitle: string,
+  employeeId: string,
+  approverName: string,
+  rejectionReason: string,
+  taskId: string
+): Promise<boolean> => {
+  console.log('📨 Starting WhatsApp notification for employee - task rejected:', employeeId);
+  
+  const phone = await getEmployeePhone(employeeId);
+  if (!phone) {
+    console.warn('⚠️ No phone number found for employee:', employeeId);
+    return false;
+  }
+
+  console.log('✅ Phone found, sending WhatsApp to:', phone);
+
+  const taskUrl = getTaskUrl(taskId);
+
+  let message = `❌ *Task Rejected*\n\n` +
+    `Your task has been rejected by *${approverName}*.\n\n` +
+    `📋 *Task:* ${taskTitle}\n` +
+    `📝 *Reason:* ${rejectionReason}\n\n` +
+    `🔗 *Click here to view the task:*\n${taskUrl}\n\n` +
+    `The task has been reassigned. Please review the feedback and resubmit.\n\n` +
+    `_Task Management System_`;
+
+  const result = await sendWhatsAppMessage({
+    number: phone,
+    type: 'text',
+    message,
+  });
+
+  console.log('📱 WhatsApp notification result:', result ? '✅ Sent' : '❌ Failed');
+  return result;
+};

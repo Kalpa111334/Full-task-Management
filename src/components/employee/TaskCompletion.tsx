@@ -5,6 +5,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { showSuccess, showError } from "@/lib/sweetalert";
 import { Camera, X } from "lucide-react";
 import { notifyTaskCompleted } from "@/lib/notificationService";
+import { notifyDeptHeadTaskProofReceived } from "@/lib/whatsappService";
 
 interface TaskCompletionProps {
   taskId: string;
@@ -150,6 +151,7 @@ const TaskCompletion = ({ taskId, onComplete, isOpen, onClose }: TaskCompletionP
         
         const employeeName = employeeData?.name || "Employee";
         const approverIds: string[] = [];
+        let departmentHeadId: string | null = null;
         
         // Add assigned_by (department head or admin)
         if (taskData.assigned_by) {
@@ -166,13 +168,35 @@ const TaskCompletion = ({ taskId, onComplete, isOpen, onClose }: TaskCompletionP
             .eq("is_active", true)
             .single();
           
-          if (deptHead && !approverIds.includes(deptHead.id)) {
-            approverIds.push(deptHead.id);
+          if (deptHead) {
+            departmentHeadId = deptHead.id;
+            if (!approverIds.includes(deptHead.id)) {
+              approverIds.push(deptHead.id);
+            }
           }
         }
         
+        // Send push notifications
         if (approverIds.length > 0) {
           await notifyTaskCompleted(taskData.title, employeeName, approverIds);
+        }
+
+        // Send WhatsApp notification to department head about task proof received
+        if (departmentHeadId) {
+          await notifyDeptHeadTaskProofReceived(
+            taskData.title,
+            departmentHeadId,
+            employeeName,
+            taskId
+          );
+        } else if (taskData.assigned_by) {
+          // Fallback: if no department head found, use assigned_by
+          await notifyDeptHeadTaskProofReceived(
+            taskData.title,
+            taskData.assigned_by,
+            employeeName,
+            taskId
+          );
         }
       }
       

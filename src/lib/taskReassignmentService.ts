@@ -1,6 +1,6 @@
 import { supabase } from '@/integrations/supabase/client';
 import { notifyTaskAssigned, notifyTaskRejected } from './notificationService';
-import { notifyEmployeeTaskAssigned, notifyDeptHeadTaskAssigned } from './whatsappService';
+import { notifyEmployeeTaskAssigned, notifyDeptHeadTaskAssigned, notifyEmployeeTaskRejected } from './whatsappService';
 
 /**
  * Automatic Task Reassignment Service
@@ -194,13 +194,22 @@ export class TaskReassignmentService {
           rejectionReason
         );
 
+        // Send WhatsApp notification about task rejection
+        await notifyEmployeeTaskRejected(
+          task.title,
+          originalEmployeeId,
+          rejecterName,
+          rejectionReason,
+          taskId
+        );
+
         await notifyTaskAssigned(
           task.title,
           originalEmployeeId,
           rejecterName
         );
 
-        // Send WhatsApp notification with task link
+        // Send WhatsApp notification for reassignment with task link
         await notifyEmployeeTaskAssigned(
           task.title,
           originalEmployeeId,
