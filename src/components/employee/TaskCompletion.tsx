@@ -188,38 +188,77 @@ const TaskCompletion = ({ taskId, onComplete, isOpen, onClose }: TaskCompletionP
         throw new Error('Task not found');
       }
 
-      // Upload via backend function to bypass storage RLS
+      // Upload photo - try direct storage upload first, fallback to Edge Function
       const path = `${taskId}/${Date.now()}-${photoFile.name}`;
-      const dataUrl = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => {
-          if (reader.result && typeof reader.result === 'string') {
-            resolve(reader.result);
-          } else {
-            reject(new Error('Failed to read photo file'));
-          }
-        };
-        reader.onerror = () => reject(new Error('Failed to read photo file'));
-        reader.readAsDataURL(photoFile);
-      });
+      let publicUrl: string | null = null;
+      
+      // Try direct storage upload first (might work if RLS allows)
+      const { data: directUploadData, error: directUploadError } = await supabase.storage
+        .from('task-photos')
+        .upload(path, photoFile, {
+          contentType: photoFile.type || 'image/jpeg',
+          upsert: true,
+          cacheControl: '3600'
+        });
+      
+      if (!directUploadError && directUploadData) {
+        // Direct upload succeeded
+        const { data: urlData } = supabase.storage
+          .from('task-photos')
+          .getPublicUrl(path);
+        publicUrl = urlData.publicUrl;
+      } else {
+        // Direct upload failed, try Edge Function as fallback
+        console.warn('Direct upload failed, trying Edge Function:', directUploadError);
+        
+        const dataUrl = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => {
+            if (reader.result && typeof reader.result === 'string') {
+              resolve(reader.result);
+            } else {
+              reject(new Error('Failed to read photo file'));
+            }
+          };
+          reader.onerror = () => reject(new Error('Failed to read photo file'));
+          reader.readAsDataURL(photoFile);
+        });
 
-      const { data: uploadRes, error: funcError } = await supabase.functions.invoke('upload-task-photo', {
-        body: { taskId, path, fileType: photoFile.type || 'image/jpeg', dataUrl }
-      });
-      
-      if (funcError) {
-        console.error('Function error:', funcError);
-        throw new Error(`Upload failed: ${funcError.message || 'Unknown error'}`);
+        try {
+          const { data: uploadRes, error: funcError } = await supabase.functions.invoke('upload-task-photo', {
+            body: { taskId, path, fileType: photoFile.type || 'image/jpeg', dataUrl }
+          });
+          
+          if (funcError) {
+            console.error('Function error:', funcError);
+            // Check if it's a network/connection error
+            if (funcError.message && funcError.message.includes('Failed to send')) {
+              throw new Error('Unable to connect to server. Please check your internet connection and try again.');
+            }
+            throw new Error(`Upload failed: ${funcError.message || 'Unknown error'}`);
+          }
+          
+          // Check if the response contains an error
+          if (uploadRes && typeof uploadRes === 'object' && 'error' in uploadRes) {
+            throw new Error(`Upload failed: ${uploadRes.error}`);
+          }
+          
+          publicUrl = uploadRes?.publicUrl as string;
+          if (!publicUrl) {
+            throw new Error('Upload succeeded but no photo URL was returned');
+          }
+        } catch (funcError: any) {
+          console.error('Edge Function invocation error:', funcError);
+          // If both methods fail, provide a helpful error message
+          if (funcError.message && funcError.message.includes('Failed to send')) {
+            throw new Error('Unable to upload photo. Please check your internet connection and try again. If the problem persists, the server may be temporarily unavailable.');
+          }
+          throw funcError;
+        }
       }
       
-      // Check if the response contains an error
-      if (uploadRes && typeof uploadRes === 'object' && 'error' in uploadRes) {
-        throw new Error(`Upload failed: ${uploadRes.error}`);
-      }
-      
-      const publicUrl = uploadRes?.publicUrl as string;
       if (!publicUrl) {
-        throw new Error('Upload succeeded but no photo URL was returned');
+        throw new Error('Failed to upload photo. Please try again.');
       }
 
       // Update task with photo and completion time
