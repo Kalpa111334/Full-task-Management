@@ -168,10 +168,10 @@ export const notifyDeptHeadTaskAssigned = async (
 
   if (taskId) {
     const taskUrl = getTaskUrl(taskId);
-    message += `🔗 *View Task:* ${taskUrl}\n\n`;
+    message += `🔗 *Click here to view the task:*\n${taskUrl}\n\n`;
   }
 
-  message += `Please check your dashboard for details and assign it to your team members.\n\n` +
+  message += `Please click the link above to access the task directly, or check your dashboard for details.\n\n` +
     `_Task Management System_`;
 
   const result = await sendWhatsAppMessage({
@@ -238,10 +238,10 @@ export const notifyEmployeeTaskAssigned = async (
 
   if (taskId) {
     const taskUrl = getTaskUrl(taskId);
-    message += `\n🔗 *View Task:* ${taskUrl}\n`;
+    message += `\n🔗 *Click here to view the task:*\n${taskUrl}\n`;
   }
 
-  message += `\nPlease check your dashboard to view details and start working on the task.\n\n` +
+  message += `\nPlease click the link above to access the task directly and start working on it.\n\n` +
     `_Task Management System_`;
 
   const result = await sendWhatsAppMessage({
@@ -276,16 +276,16 @@ export const notifyBulkEmployeeTasksAssigned = async (
       `Hello! You have been assigned ${taskCount > 1 ? taskCount + ' new tasks' : 'a new task'} by *${assignedByName}*.\n\n` +
       `📋 *Task:* ${taskTitle}\n`;
 
-    // Add task link if available (use first taskId or corresponding taskId for this employee)
+    // Add task link if available (use corresponding taskId for this employee)
     if (taskIds && taskIds.length > 0) {
       const taskId = taskIds[index] || taskIds[0]; // Use corresponding taskId or fallback to first
       if (taskId) {
         const taskUrl = getTaskUrl(taskId);
-        message += `\n🔗 *View Task:* ${taskUrl}\n`;
+        message += `\n🔗 *Click here to view your task:*\n${taskUrl}\n`;
       }
     }
 
-    message += `\nPlease check your dashboard to view details and start working.\n\n` +
+    message += `\nPlease click the link above to access your task directly and start working on it.\n\n` +
       `_Task Management System_`;
 
     return sendWhatsAppMessage({
