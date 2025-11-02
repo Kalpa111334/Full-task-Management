@@ -26,35 +26,102 @@ const TaskCompletion = ({ taskId, onComplete, isOpen, onClose }: TaskCompletionP
   const startCamera = async () => {
     try {
       setCameraLoading(true);
+      
+      // Check if getUserMedia is available
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        throw new Error("Camera API not supported in this browser");
+      }
+
       // Stop any existing stream first
       if (streamRef.current) {
         streamRef.current.getTracks().forEach(track => track.stop());
         streamRef.current = null;
       }
 
-      const stream = await navigator.mediaDevices.getUserMedia({ 
-        video: { 
-          facingMode: "environment",
-          width: { ideal: 1280 },
-          height: { ideal: 720 }
-        } 
-      });
-      
+      // Reset video element
       if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        streamRef.current = stream;
-        // Wait for video to be ready
-        videoRef.current.onloadedmetadata = () => {
+        videoRef.current.srcObject = null;
+      }
+
+      // Try to get camera with environment facing (back camera on mobile)
+      let stream: MediaStream | null = null;
+      let lastError: any = null;
+      
+      // Try environment camera first (back camera on mobile)
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ 
+          video: { 
+            facingMode: "environment",
+            width: { ideal: 1280 },
+            height: { ideal: 720 }
+          } 
+        });
+      } catch (envError) {
+        lastError = envError;
+        console.warn("Environment camera not available, trying user-facing:", envError);
+        
+        // Try user-facing camera (front camera on mobile, default on desktop)
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({ 
+            video: { 
+              facingMode: "user", 
+              width: { ideal: 1280 }, 
+              height: { ideal: 720 } 
+            } 
+          });
+        } catch (userError) {
+          lastError = userError;
+          console.warn("User-facing camera failed, trying any camera:", userError);
+          
+          // Last resort: try any available camera
+          try {
+            stream = await navigator.mediaDevices.getUserMedia({ 
+              video: true 
+            });
+          } catch (anyError) {
+            lastError = anyError;
+            throw anyError;
+          }
+        }
+      }
+
+      if (!stream) {
+        throw new Error("Failed to get camera stream");
+      }
+
+      if (!videoRef.current) {
+        stream.getTracks().forEach(track => track.stop());
+        setCameraLoading(false);
+        return;
+      }
+
+      videoRef.current.srcObject = stream;
+      streamRef.current = stream;
+      
+      // Wait for video to be ready
+      const handleLoadedMetadata = () => {
+        setUseCamera(true);
+        setCameraLoading(false);
+      };
+      
+      videoRef.current.onloadedmetadata = handleLoadedMetadata;
+      
+      // Also listen for canplay event as backup
+      videoRef.current.oncanplay = handleLoadedMetadata;
+      
+      // Fallback: if events don't fire, check readyState after a delay
+      setTimeout(() => {
+        if (videoRef.current && videoRef.current.readyState >= 2 && cameraLoading) {
           setUseCamera(true);
           setCameraLoading(false);
-        };
-      } else {
-        setCameraLoading(false);
-      }
+        }
+      }, 1000);
+      
     } catch (error) {
       console.error("Camera error:", error);
       setCameraLoading(false);
-      showError("Failed to access camera. Please check permissions.");
+      setUseCamera(false);
+      showError("Failed to access camera. Please check permissions and try again.");
     }
   };
 
@@ -256,28 +323,27 @@ const TaskCompletion = ({ taskId, onComplete, isOpen, onClose }: TaskCompletionP
             </div>
           )}
           
-          {useCamera && !cameraLoading && (
-            <div className="space-y-2 sm:space-y-3">
-              <video
-                ref={videoRef}
-                autoPlay
-                playsInline
-                muted
-                className="w-full rounded-lg bg-black max-h-64 sm:max-h-96"
-                style={{ transform: 'scaleX(-1)' }} // Mirror the video for better UX
-              />
-              <div className="flex flex-col sm:flex-row gap-2">
-                <Button onClick={capturePhoto} className="flex-1 bg-success hover:bg-success/90" size="sm">
-                  <Camera className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-2" />
-                  Capture Photo
-                </Button>
-                <Button onClick={stopCamera} variant="outline" size="sm">
-                  <X className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-2" />
-                  Cancel
-                </Button>
-              </div>
+          {/* Always render video element so ref is available, hide when not in use */}
+          <div className={`space-y-2 sm:space-y-3 ${useCamera && !cameraLoading ? '' : 'hidden'}`}>
+            <video
+              ref={videoRef}
+              autoPlay
+              playsInline
+              muted
+              className="w-full rounded-lg bg-black max-h-64 sm:max-h-96"
+              style={{ transform: 'scaleX(-1)' }} // Mirror the video for better UX
+            />
+            <div className="flex flex-col sm:flex-row gap-2">
+              <Button onClick={capturePhoto} className="flex-1 bg-success hover:bg-success/90" size="sm">
+                <Camera className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-2" />
+                Capture Photo
+              </Button>
+              <Button onClick={stopCamera} variant="outline" size="sm">
+                <X className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-2" />
+                Cancel
+              </Button>
             </div>
-          )}
+          </div>
 
           {!useCamera && !cameraLoading && !photoPreview && (
             <div className="flex items-center justify-center py-8">
