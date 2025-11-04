@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { showSuccess, showError, showConfirm } from "@/lib/sweetalert";
-import { Plus, Edit, Trash2, UserCheck, UserX, Search, Eye, Filter } from "lucide-react";
+import { Plus, Edit, Trash2, UserCheck, UserX, Search, Eye, Filter, Loader2 } from "lucide-react";
 import { notifyEmployeeAdded, notifyEmployeeCredentials, notifyDepartmentHeadAssigned } from "@/lib/notificationService";
 import { notifyEmployeeRegistered, notifyDepartmentHeadRegistered } from "@/lib/whatsappService";
 import { Badge } from "@/components/ui/badge";
@@ -58,6 +58,9 @@ const EmployeeManagement = ({ adminId }: EmployeeManagementProps = {}) => {
   const [viewingEmployeeTasks, setViewingEmployeeTasks] = useState<Employee | null>(null);
   const [employeeTasks, setEmployeeTasks] = useState<EmployeeTask[]>([]);
   const [loadingTasks, setLoadingTasks] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalTasks, setTotalTasks] = useState(0);
+  const tasksPerPage = 5;
   const [formData, setFormData] = useState({
     name: "",
     email: "",
@@ -259,10 +262,49 @@ const EmployeeManagement = ({ adminId }: EmployeeManagementProps = {}) => {
     setFilteredEmployees(filtered);
   }, [searchTerm, filterDepartment, filterRole, employees]);
 
-  // Fetch employee tasks
-  const fetchEmployeeTasks = async (employeeId: string) => {
+  // Real-time subscription for employee tasks
+  useEffect(() => {
+    if (!viewingEmployeeTasks) return;
+
+    const channel = supabase
+      .channel(`tasks-${viewingEmployeeTasks.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "tasks",
+          filter: `assigned_to=eq.${viewingEmployeeTasks.id}`,
+        },
+        (payload) => {
+          console.log("Task change detected:", payload);
+          // Refresh tasks when changes occur
+          fetchEmployeeTasks(viewingEmployeeTasks.id, currentPage);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [viewingEmployeeTasks, currentPage]);
+
+  // Fetch employee tasks with pagination
+  const fetchEmployeeTasks = async (employeeId: string, page: number = 1) => {
     setLoadingTasks(true);
     try {
+      const from = (page - 1) * tasksPerPage;
+      const to = from + tasksPerPage - 1;
+
+      // Get total count
+      const { count } = await supabase
+        .from("tasks")
+        .select("*", { count: "exact", head: true })
+        .eq("assigned_to", employeeId);
+
+      setTotalTasks(count || 0);
+
+      // Get paginated data
       const { data, error } = await supabase
         .from("tasks")
         .select(`
@@ -275,7 +317,8 @@ const EmployeeManagement = ({ adminId }: EmployeeManagementProps = {}) => {
           department:departments(name)
         `)
         .eq("assigned_to", employeeId)
-        .order("created_at", { ascending: false });
+        .order("created_at", { ascending: false })
+        .range(from, to);
 
       if (error) {
         showError("Failed to fetch employee tasks");
@@ -290,7 +333,15 @@ const EmployeeManagement = ({ adminId }: EmployeeManagementProps = {}) => {
 
   const viewEmployeeTasks = async (employee: Employee) => {
     setViewingEmployeeTasks(employee);
-    await fetchEmployeeTasks(employee.id);
+    setCurrentPage(1);
+    await fetchEmployeeTasks(employee.id, 1);
+  };
+
+  const handlePageChange = (newPage: number) => {
+    if (viewingEmployeeTasks) {
+      setCurrentPage(newPage);
+      fetchEmployeeTasks(viewingEmployeeTasks.id, newPage);
+    }
   };
 
   const updateAdminDepartments = async (adminId: string, departmentIds: string[]) => {
@@ -921,12 +972,14 @@ const EmployeeManagement = ({ adminId }: EmployeeManagementProps = {}) => {
           </DialogHeader>
           <div className="space-y-4">
             {loadingTasks ? (
-              <p className="text-center text-muted-foreground">Loading tasks...</p>
+              <div className="flex flex-col items-center justify-center py-8 space-y-3">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                <p className="text-sm text-muted-foreground">Loading tasks...</p>
+              </div>
             ) : employeeTasks.length === 0 ? (
-              <p className="text-center text-muted-foreground">No tasks assigned to this employee.</p>
+              <p className="text-center text-muted-foreground py-8">No tasks assigned to this employee.</p>
             ) : (
-              <div className="space-y-3">
-                {employeeTasks.map((task) => (
+              <div className="space-y-3">{employeeTasks.map((task) => (
                   <Card key={task.id} className="p-4">
                     <div className="space-y-2">
                       <div className="flex justify-between items-start">
@@ -961,6 +1014,67 @@ const EmployeeManagement = ({ adminId }: EmployeeManagementProps = {}) => {
                     </div>
                   </Card>
                 ))}
+              </div>
+            )}
+            
+            {/* Pagination Controls */}
+            {!loadingTasks && totalTasks > tasksPerPage && (
+              <div className="flex items-center justify-between border-t pt-4">
+                <div className="text-sm text-muted-foreground">
+                  Showing {((currentPage - 1) * tasksPerPage) + 1} to {Math.min(currentPage * tasksPerPage, totalTasks)} of {totalTasks} tasks
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handlePageChange(currentPage - 1)}
+                    disabled={currentPage === 1}
+                  >
+                    Previous
+                  </Button>
+                  <div className="flex items-center gap-1">
+                    {Array.from({ length: Math.ceil(totalTasks / tasksPerPage) }, (_, i) => i + 1)
+                      .filter(page => {
+                        // Show first page, last page, current page, and adjacent pages
+                        const totalPages = Math.ceil(totalTasks / tasksPerPage);
+                        return page === 1 || 
+                               page === totalPages || 
+                               Math.abs(page - currentPage) <= 1;
+                      })
+                      .map((page, idx, arr) => {
+                        // Add ellipsis if there's a gap
+                        const prevPage = arr[idx - 1];
+                        const showEllipsis = prevPage && page - prevPage > 1;
+                        
+                        return (
+                          <>
+                            {showEllipsis && (
+                              <span key={`ellipsis-${page}`} className="px-2 text-muted-foreground">
+                                ...
+                              </span>
+                            )}
+                            <Button
+                              key={page}
+                              variant={currentPage === page ? "default" : "outline"}
+                              size="sm"
+                              onClick={() => handlePageChange(page)}
+                              className="min-w-[2.5rem]"
+                            >
+                              {page}
+                            </Button>
+                          </>
+                        );
+                      })}
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handlePageChange(currentPage + 1)}
+                    disabled={currentPage >= Math.ceil(totalTasks / tasksPerPage)}
+                  >
+                    Next
+                  </Button>
+                </div>
               </div>
             )}
           </div>
