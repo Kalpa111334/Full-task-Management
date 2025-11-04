@@ -41,7 +41,7 @@ const Login = () => {
       localStorage.setItem("location_active_until", String(Date.now() + 24 * 60 * 60 * 1000));
       showSuccess("Welcome back!");
       
-      if (data.role === "admin") {
+      if (data.role === "admin" || data.role === "super_admin") {
         navigate("/admin");
       } else if (data.role === "department_head") {
         navigate("/department-head");

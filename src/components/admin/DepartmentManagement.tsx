@@ -16,25 +16,78 @@ interface Department {
   created_at: string;
 }
 
-const DepartmentManagement = () => {
+interface DepartmentManagementProps {
+  adminId?: string;
+}
+
+const DepartmentManagement = ({ adminId }: DepartmentManagementProps = {}) => {
   const [departments, setDepartments] = useState<Department[]>([]);
   const [employeeCounts, setEmployeeCounts] = useState<Record<string, number>>({});
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingDepartment, setEditingDepartment] = useState<Department | null>(null);
+  const [adminDepartmentIds, setAdminDepartmentIds] = useState<string[]>([]);
   const [formData, setFormData] = useState({
     name: "",
     description: "",
   });
 
   useEffect(() => {
-    fetchDepartments();
-  }, []);
+    fetchAdminDepartments();
+  }, [adminId]);
+
+  useEffect(() => {
+    if (adminDepartmentIds.length > 0 || !adminId) {
+      fetchDepartments();
+    }
+  }, [adminDepartmentIds]);
+
+  const fetchAdminDepartments = async () => {
+    if (!adminId) {
+      // Super admin or no filtering needed
+      setAdminDepartmentIds([]);
+      return;
+    }
+
+    // Check if user is super_admin
+    const { data: employeeData } = await supabase
+      .from("employees")
+      .select("role")
+      .eq("id", adminId)
+      .single();
+
+    if (employeeData?.role === "super_admin") {
+      // Super admin sees all departments
+      setAdminDepartmentIds([]);
+      return;
+    }
+
+    // Fetch admin's assigned departments
+    const { data, error } = await supabase
+      .from("admin_departments")
+      .select("department_id")
+      .eq("admin_id", adminId);
+
+    if (error) {
+      console.error("Failed to fetch admin departments:", error);
+      setAdminDepartmentIds([]);
+      return;
+    }
+
+    setAdminDepartmentIds((data || []).map(ad => ad.department_id));
+  };
 
   const fetchDepartments = async () => {
-    const { data, error } = await supabase
+    let query = supabase
       .from("departments")
       .select("*")
       .order("created_at", { ascending: false });
+
+    // Filter by admin's departments if not super admin
+    if (adminId && adminDepartmentIds.length > 0) {
+      query = query.in("id", adminDepartmentIds);
+    }
+
+    const { data, error } = await query;
 
     if (error) {
       showError("Failed to fetch departments");

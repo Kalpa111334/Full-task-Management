@@ -44,11 +44,52 @@ const AdminTaskReview = ({ adminId }: AdminTaskReviewProps) => {
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [rejectReason, setRejectReason] = useState("");
   const [showRejectDialog, setShowRejectDialog] = useState(false);
+  const [adminDepartmentIds, setAdminDepartmentIds] = useState<string[]>([]);
 
   useEffect(() => {
-    fetchTasks();
-    setupRealtimeSubscription();
-  }, []);
+    fetchAdminDepartments();
+  }, [adminId]);
+
+  useEffect(() => {
+    if (adminDepartmentIds.length > 0 || !adminId) {
+      fetchTasks();
+      setupRealtimeSubscription();
+    }
+  }, [adminDepartmentIds]);
+
+  const fetchAdminDepartments = async () => {
+    if (!adminId) {
+      setAdminDepartmentIds([]);
+      return;
+    }
+
+    // Check if user is super_admin
+    const { data: employeeData } = await supabase
+      .from("employees")
+      .select("role")
+      .eq("id", adminId)
+      .single();
+
+    if (employeeData?.role === "super_admin") {
+      // Super admin sees all tasks
+      setAdminDepartmentIds([]);
+      return;
+    }
+
+    // Fetch admin's assigned departments
+    const { data, error } = await supabase
+      .from("admin_departments")
+      .select("department_id")
+      .eq("admin_id", adminId);
+
+    if (error) {
+      console.error("Failed to fetch admin departments:", error);
+      setAdminDepartmentIds([]);
+      return;
+    }
+
+    setAdminDepartmentIds((data || []).map(ad => ad.department_id));
+  };
 
   const fetchTasks = async () => {
     setLoading(true);
@@ -77,7 +118,7 @@ const AdminTaskReview = ({ adminId }: AdminTaskReviewProps) => {
 
       // Fetch tasks awaiting admin review (assigned by admins and completed by department heads)
       // Query all tasks assigned by admins that have completion photos and are pending review
-      const { data, error } = await supabase
+      let query = supabase
         .from("tasks")
         .select(`
           *,
@@ -87,6 +128,13 @@ const AdminTaskReview = ({ adminId }: AdminTaskReviewProps) => {
         .in("assigned_by", adminIds)
         .not("completion_photo_url", "is", null)
         .order("completed_at", { ascending: false });
+
+      // Filter by admin's departments if not super admin
+      if (adminId && adminDepartmentIds.length > 0) {
+        query = query.in("department_id", adminDepartmentIds);
+      }
+
+      const { data, error } = await query;
 
       if (error) {
         console.error("Error fetching tasks:", error);

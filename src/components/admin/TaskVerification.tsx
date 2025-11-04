@@ -47,15 +47,57 @@ const TaskVerification = ({ adminId }: TaskVerificationProps) => {
   const [selectedRequest, setSelectedRequest] = useState<VerificationRequest | null>(null);
   const [rejectReason, setRejectReason] = useState("");
   const [showRejectDialog, setShowRejectDialog] = useState(false);
+  const [adminDepartmentIds, setAdminDepartmentIds] = useState<string[]>([]);
 
   useEffect(() => {
-    fetchRequests();
-    setupRealtimeSubscription();
-  }, []);
+    fetchAdminDepartments();
+  }, [adminId]);
+
+  useEffect(() => {
+    if (adminDepartmentIds.length > 0 || !adminId) {
+      fetchRequests();
+      setupRealtimeSubscription();
+    }
+  }, [adminDepartmentIds]);
+
+  const fetchAdminDepartments = async () => {
+    if (!adminId) {
+      setAdminDepartmentIds([]);
+      return;
+    }
+
+    // Check if user is super_admin
+    const { data: employeeData } = await supabase
+      .from("employees")
+      .select("role")
+      .eq("id", adminId)
+      .single();
+
+    if (employeeData?.role === "super_admin") {
+      // Super admin sees all verification requests
+      setAdminDepartmentIds([]);
+      return;
+    }
+
+    // Fetch admin's assigned departments
+    const { data, error } = await supabase
+      .from("admin_departments")
+      .select("department_id")
+      .eq("admin_id", adminId);
+
+    if (error) {
+      console.error("Failed to fetch admin departments:", error);
+      setAdminDepartmentIds([]);
+      return;
+    }
+
+    setAdminDepartmentIds((data || []).map(ad => ad.department_id));
+  };
 
   const fetchRequests = async () => {
     setLoading(true);
-    const { data, error } = await supabase
+    
+    let query = supabase
       .from("task_verification_requests")
       .select(`
         *,
@@ -65,6 +107,7 @@ const TaskVerification = ({ adminId }: TaskVerificationProps) => {
           assigned_to,
           status,
           completed_at,
+          department_id,
           employee:employees!tasks_assigned_to_fkey (
             name,
             email
@@ -77,12 +120,23 @@ const TaskVerification = ({ adminId }: TaskVerificationProps) => {
       `)
       .order("created_at", { ascending: false });
 
+    const { data, error } = await query;
+
     if (error) {
       showError("Failed to load verification requests");
+      setLoading(false);
       return;
     }
 
-    setRequests(data || []);
+    // Filter by admin's departments if not super admin
+    let filteredData = data || [];
+    if (adminId && adminDepartmentIds.length > 0) {
+      filteredData = (data || []).filter((request: any) => 
+        request.task?.department_id && adminDepartmentIds.includes(request.task.department_id)
+      );
+    }
+
+    setRequests(filteredData);
     setLoading(false);
   };
 

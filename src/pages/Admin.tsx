@@ -26,7 +26,7 @@ const Admin = () => {
     }
 
     const parsed = JSON.parse(employeeData);
-    if (parsed.role !== "admin") {
+    if (parsed.role !== "admin" && parsed.role !== "super_admin") {
       showError("Access denied");
       navigate("/");
       return;
@@ -135,9 +135,9 @@ const Admin = () => {
         </div>
 
         {/* Content */}
-        {activeTab === "overview" && <AdminStats />}
+        {activeTab === "overview" && <AdminStats adminId={employee.id} />}
         {activeTab === "employees" && <EmployeeManagement />}
-        {activeTab === "departments" && <DepartmentManagement />}
+        {activeTab === "departments" && <DepartmentManagement adminId={employee.id} />}
         {activeTab === "tasks" && <AdminTaskAssignment adminId={employee.id} />}
         {activeTab === "verifications" && <TaskVerification adminId={employee.id} />}
         {activeTab === "review" && <AdminTaskReview adminId={employee.id} />}

@@ -11,6 +11,7 @@ import { Plus, Edit, Trash2, UserCheck, UserX } from "lucide-react";
 import { notifyEmployeeAdded, notifyEmployeeCredentials, notifyDepartmentHeadAssigned } from "@/lib/notificationService";
 import { notifyEmployeeRegistered, notifyDepartmentHeadRegistered } from "@/lib/whatsappService";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 
 interface Employee {
   id: string;
@@ -20,6 +21,7 @@ interface Employee {
   department_id: string | null;
   phone: string | null;
   is_active: boolean;
+  admin_departments?: string[]; // Array of department names for admins
 }
 
 interface Department {
@@ -32,6 +34,7 @@ const EmployeeManagement = () => {
   const [departments, setDepartments] = useState<Department[]>([]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
+  const [selectedAdminDepartments, setSelectedAdminDepartments] = useState<string[]>([]);
   const [formData, setFormData] = useState({
     name: "",
     email: "",
@@ -99,7 +102,26 @@ const EmployeeManagement = () => {
       return;
     }
 
-    setEmployees(data || []);
+    // Fetch admin departments for each admin/super_admin
+    const employeesWithDepts = await Promise.all(
+      (data || []).map(async (employee) => {
+        if (employee.role === "admin" || employee.role === "super_admin") {
+          const { data: adminDepts } = await supabase
+            .from("admin_departments")
+            .select("department_id, departments:departments(name)")
+            .eq("admin_id", employee.id);
+
+          const deptNames = (adminDepts || [])
+            .map((ad: any) => ad.departments?.name)
+            .filter(Boolean);
+
+          return { ...employee, admin_departments: deptNames };
+        }
+        return employee;
+      })
+    );
+
+    setEmployees(employeesWithDepts || []);
   };
 
   const fetchDepartments = async () => {
@@ -116,8 +138,58 @@ const EmployeeManagement = () => {
     setDepartments(data || []);
   };
 
+  const fetchAdminDepartments = async (adminId: string) => {
+    const { data, error } = await supabase
+      .from("admin_departments")
+      .select("department_id")
+      .eq("admin_id", adminId);
+
+    if (error) {
+      console.error("Failed to fetch admin departments:", error);
+      return [];
+    }
+
+    return (data || []).map(ad => ad.department_id);
+  };
+
+  const updateAdminDepartments = async (adminId: string, departmentIds: string[]) => {
+    // First, delete existing admin department associations
+    const { error: deleteError } = await supabase
+      .from("admin_departments")
+      .delete()
+      .eq("admin_id", adminId);
+
+    if (deleteError) {
+      console.error("Failed to delete existing admin departments:", deleteError);
+      throw deleteError;
+    }
+
+    // Then insert new associations
+    if (departmentIds.length > 0) {
+      const insertData = departmentIds.map(deptId => ({
+        admin_id: adminId,
+        department_id: deptId
+      }));
+
+      const { error: insertError } = await supabase
+        .from("admin_departments")
+        .insert(insertData);
+
+      if (insertError) {
+        console.error("Failed to insert admin departments:", insertError);
+        throw insertError;
+      }
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Validation: If role is admin or super_admin and no departments selected
+    if ((formData.role === "admin" || formData.role === "super_admin") && selectedAdminDepartments.length === 0) {
+      showError("Please select at least one department for admin role");
+      return;
+    }
 
     if (editingEmployee) {
       const wasDeptHead = editingEmployee.role === "department_head";
@@ -126,7 +198,7 @@ const EmployeeManagement = () => {
       const updateData: any = {
         name: formData.name,
         email: formData.email,
-        role: formData.role as "admin" | "department_head" | "employee",
+        role: formData.role as "admin" | "super_admin" | "department_head" | "employee",
         department_id: formData.department_id && formData.department_id !== "none" ? formData.department_id : null,
         // Always include phone field - trim whitespace and use null if empty
         phone: formData.phone && formData.phone.trim() !== "" ? formData.phone.trim() : null,
@@ -149,6 +221,17 @@ const EmployeeManagement = () => {
         console.error("Failed to update employee:", error);
         showError(`Failed to update employee: ${error.message}`);
         return;
+      }
+
+      // Update admin departments if role is admin or super_admin
+      if (formData.role === "admin" || formData.role === "super_admin") {
+        try {
+          await updateAdminDepartments(editingEmployee.id, selectedAdminDepartments);
+        } catch (err) {
+          console.error("Failed to update admin departments:", err);
+          showError("Employee updated but failed to update department assignments");
+          return;
+        }
       }
 
       // Verify the update was successful
@@ -245,7 +328,7 @@ const EmployeeManagement = () => {
             name: formData.name,
             email: formData.email,
             password: formData.password,
-            role: formData.role as "admin" | "department_head" | "employee",
+            role: formData.role as "admin" | "super_admin" | "department_head" | "employee",
             department_id: formData.department_id && formData.department_id !== "none" ? formData.department_id : null,
             phone: formData.phone || null,
           },
@@ -257,11 +340,23 @@ const EmployeeManagement = () => {
         return;
       }
 
+      const employeeId = created[0].id as string;
+
+      // Create admin department associations if role is admin or super_admin
+      if ((formData.role === "admin" || formData.role === "super_admin") && selectedAdminDepartments.length > 0) {
+        try {
+          await updateAdminDepartments(employeeId, selectedAdminDepartments);
+        } catch (err) {
+          console.error("Failed to create admin departments:", err);
+          showError("Employee created but failed to assign departments");
+          return;
+        }
+      }
+
       showSuccess("Employee added successfully");
 
       // Send welcome + credentials notifications
       try {
-        const employeeId = created[0].id as string;
         const employeeName = created[0].name as string;
         const employeeRole = created[0].role as string;
         let departmentName: string | null = null;
@@ -341,7 +436,7 @@ const EmployeeManagement = () => {
     fetchEmployees();
   };
 
-  const openEditDialog = (employee: Employee) => {
+  const openEditDialog = async (employee: Employee) => {
     setEditingEmployee(employee);
     setFormData({
       name: employee.name,
@@ -351,11 +446,21 @@ const EmployeeManagement = () => {
       department_id: employee.department_id || "none",
       phone: employee.phone || "",
     });
+
+    // Load admin departments if employee is admin or super_admin
+    if (employee.role === "admin" || employee.role === "super_admin") {
+      const adminDepts = await fetchAdminDepartments(employee.id);
+      setSelectedAdminDepartments(adminDepts);
+    } else {
+      setSelectedAdminDepartments([]);
+    }
+
     setIsDialogOpen(true);
   };
 
   const resetForm = () => {
     setEditingEmployee(null);
+    setSelectedAdminDepartments([]);
     setFormData({
       name: "",
       email: "",
@@ -368,11 +473,20 @@ const EmployeeManagement = () => {
 
   const getRoleBadge = (role: string) => {
     const colors = {
+      super_admin: "bg-purple-600 text-white",
       admin: "bg-destructive text-destructive-foreground",
       department_head: "bg-secondary text-secondary-foreground",
       employee: "bg-muted text-muted-foreground",
     };
     return colors[role as keyof typeof colors] || colors.employee;
+  };
+
+  const toggleAdminDepartment = (departmentId: string) => {
+    setSelectedAdminDepartments(prev => 
+      prev.includes(departmentId)
+        ? prev.filter(id => id !== departmentId)
+        : [...prev, departmentId]
+    );
   };
 
   return (
@@ -441,7 +555,13 @@ const EmployeeManagement = () => {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="role">Role *</Label>
-                  <Select value={formData.role} onValueChange={(value) => setFormData({ ...formData, role: value })}>
+                  <Select value={formData.role} onValueChange={(value) => {
+                    setFormData({ ...formData, role: value });
+                    // Clear admin departments when changing away from admin roles
+                    if (value !== "admin" && value !== "super_admin") {
+                      setSelectedAdminDepartments([]);
+                    }
+                  }}>
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
@@ -449,11 +569,12 @@ const EmployeeManagement = () => {
                       <SelectItem value="employee">Employee</SelectItem>
                       <SelectItem value="department_head">Department Head</SelectItem>
                       <SelectItem value="admin">Admin</SelectItem>
+                      <SelectItem value="super_admin">Super Admin</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="department">Department</Label>
+                  <Label htmlFor="department">Primary Department</Label>
                   <Select
                     value={formData.department_id}
                     onValueChange={(value) => setFormData({ ...formData, department_id: value })}
@@ -472,6 +593,40 @@ const EmployeeManagement = () => {
                   </Select>
                 </div>
               </div>
+
+              {/* Multi-Department Selection for Admin/Super Admin */}
+              {(formData.role === "admin" || formData.role === "super_admin") && (
+                <div className="space-y-2 border rounded-lg p-4 bg-muted/30">
+                  <Label className="text-base font-semibold">
+                    Manage Departments * 
+                    <span className="text-xs font-normal text-muted-foreground ml-2">
+                      (Select departments this admin can manage)
+                    </span>
+                  </Label>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-60 overflow-y-auto">
+                    {departments.map((dept) => (
+                      <div key={dept.id} className="flex items-center space-x-2">
+                        <Checkbox
+                          id={`dept-${dept.id}`}
+                          checked={selectedAdminDepartments.includes(dept.id)}
+                          onCheckedChange={() => toggleAdminDepartment(dept.id)}
+                        />
+                        <Label
+                          htmlFor={`dept-${dept.id}`}
+                          className="text-sm font-normal cursor-pointer"
+                        >
+                          {dept.name}
+                        </Label>
+                      </div>
+                    ))}
+                  </div>
+                  {selectedAdminDepartments.length === 0 && (
+                    <p className="text-xs text-destructive mt-2">
+                      Please select at least one department
+                    </p>
+                  )}
+                </div>
+              )}
 
               <div className="flex flex-col sm:flex-row gap-2">
                 <Button type="submit" className="bg-gradient-primary sm:flex-1">
@@ -513,6 +668,18 @@ const EmployeeManagement = () => {
                 <p className="text-xs sm:text-sm text-muted-foreground truncate">{employee.email}</p>
                 {employee.phone && (
                   <p className="text-xs sm:text-sm text-muted-foreground">Phone: {employee.phone}</p>
+                )}
+                {(employee.role === "admin" || employee.role === "super_admin") && employee.admin_departments && employee.admin_departments.length > 0 && (
+                  <div className="mt-2">
+                    <p className="text-xs font-semibold text-muted-foreground mb-1">Manages Departments:</p>
+                    <div className="flex flex-wrap gap-1">
+                      {employee.admin_departments.map((deptName, idx) => (
+                        <Badge key={idx} variant="secondary" className="text-xs">
+                          {deptName}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
                 )}
               </div>
               <div className="flex gap-1 sm:gap-2">

@@ -14,6 +14,42 @@ export type Database = {
   }
   public: {
     Tables: {
+      admin_departments: {
+        Row: {
+          admin_id: string
+          created_at: string | null
+          department_id: string
+          id: string
+        }
+        Insert: {
+          admin_id: string
+          created_at?: string | null
+          department_id: string
+          id?: string
+        }
+        Update: {
+          admin_id?: string
+          created_at?: string | null
+          department_id?: string
+          id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "admin_departments_admin_id_fkey"
+            columns: ["admin_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "admin_departments_department_id_fkey"
+            columns: ["department_id"]
+            isOneToOne: false
+            referencedRelation: "departments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       departments: {
         Row: {
           created_at: string | null
@@ -460,7 +496,7 @@ export type Database = {
       [_ in never]: never
     }
     Enums: {
-      employee_role: "admin" | "department_head" | "employee"
+      employee_role: "admin" | "department_head" | "employee" | "super_admin"
       task_priority: "low" | "medium" | "high" | "urgent"
       task_status: "pending" | "in_progress" | "completed"
     }

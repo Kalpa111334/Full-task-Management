@@ -31,6 +31,7 @@ interface Task {
   location_address: string | null;
   assigned_to: string | null;
   is_active: boolean;
+  created_at?: string;
   employee?: { name: string };
   department?: { name: string };
 }
@@ -53,6 +54,7 @@ const AdminTaskAssignment = ({ adminId }: AdminTaskAssignmentProps) => {
   const [departmentHeads, setDepartmentHeads] = useState<DepartmentHead[]>([]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [openDeptHeadDropdown, setOpenDeptHeadDropdown] = useState(false);
+  const [adminDepartmentIds, setAdminDepartmentIds] = useState<string[]>([]);
   const [formData, setFormData] = useState({
     title: "",
     description: "",
@@ -71,8 +73,14 @@ const AdminTaskAssignment = ({ adminId }: AdminTaskAssignmentProps) => {
   });
 
   useEffect(() => {
-    fetchTasks();
-    fetchDepartmentHeads();
+    fetchAdminDepartments();
+  }, [adminId]);
+
+  useEffect(() => {
+    if (adminDepartmentIds.length > 0 || !adminId) {
+      fetchTasks();
+      fetchDepartmentHeads();
+    }
 
     // Subscribe to real-time updates
     const channel = supabase
@@ -85,16 +93,57 @@ const AdminTaskAssignment = ({ adminId }: AdminTaskAssignmentProps) => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [adminDepartmentIds]);
+
+  const fetchAdminDepartments = async () => {
+    if (!adminId) {
+      setAdminDepartmentIds([]);
+      return;
+    }
+
+    // Check if user is super_admin
+    const { data: employeeData } = await supabase
+      .from("employees")
+      .select("role")
+      .eq("id", adminId)
+      .single();
+
+    if (employeeData?.role === "super_admin") {
+      // Super admin sees all tasks
+      setAdminDepartmentIds([]);
+      return;
+    }
+
+    // Fetch admin's assigned departments
+    const { data, error } = await supabase
+      .from("admin_departments")
+      .select("department_id")
+      .eq("admin_id", adminId);
+
+    if (error) {
+      console.error("Failed to fetch admin departments:", error);
+      setAdminDepartmentIds([]);
+      return;
+    }
+
+    setAdminDepartmentIds((data || []).map(ad => ad.department_id));
+  };
 
   const fetchTasks = async () => {
-    const { data, error } = await supabase
+    let query = supabase
       .from("tasks")
       .select(`
         *,
         employee:employees!tasks_assigned_to_fkey (name),
         department:departments (name)
       `);
+
+    // Filter by admin's departments if not super admin
+    if (adminId && adminDepartmentIds.length > 0) {
+      query = query.in("department_id", adminDepartmentIds);
+    }
+
+    const { data, error } = await query;
 
     if (error) {
       showError("Failed to fetch tasks");
@@ -107,7 +156,7 @@ const AdminTaskAssignment = ({ adminId }: AdminTaskAssignmentProps) => {
   };
 
   const fetchDepartmentHeads = async () => {
-    const { data, error } = await supabase
+    let query = supabase
       .from("employees")
       .select(`
         id,
@@ -120,6 +169,13 @@ const AdminTaskAssignment = ({ adminId }: AdminTaskAssignmentProps) => {
       .eq("role", "department_head")
       .not("department_id", "is", null)
       .order("name");
+
+    // Filter by admin's departments if not super admin
+    if (adminId && adminDepartmentIds.length > 0) {
+      query = query.in("department_id", adminDepartmentIds);
+    }
+
+    const { data, error } = await query;
 
     if (error) {
       showError("Failed to fetch department heads");

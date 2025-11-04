@@ -3,7 +3,11 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
 import { Users, Building2, ClipboardList, CheckCircle2, Clock, AlertCircle } from "lucide-react";
 
-const AdminStats = () => {
+interface AdminStatsProps {
+  adminId?: string;
+}
+
+const AdminStats = ({ adminId }: AdminStatsProps = {}) => {
   const [stats, setStats] = useState({
     totalEmployees: 0,
     activeEmployees: 0,
@@ -13,47 +17,100 @@ const AdminStats = () => {
     pendingTasks: 0,
     inProgressTasks: 0,
   });
+  const [adminDepartmentIds, setAdminDepartmentIds] = useState<string[]>([]);
 
   useEffect(() => {
-    fetchStats();
-  }, []);
+    fetchAdminDepartments();
+  }, [adminId]);
+
+  useEffect(() => {
+    if (adminDepartmentIds.length > 0 || !adminId) {
+      fetchStats();
+    }
+  }, [adminDepartmentIds]);
+
+  const fetchAdminDepartments = async () => {
+    if (!adminId) {
+      setAdminDepartmentIds([]);
+      return;
+    }
+
+    // Check if user is super_admin
+    const { data: employeeData } = await supabase
+      .from("employees")
+      .select("role")
+      .eq("id", adminId)
+      .single();
+
+    if (employeeData?.role === "super_admin") {
+      // Super admin sees all stats
+      setAdminDepartmentIds([]);
+      return;
+    }
+
+    // Fetch admin's assigned departments
+    const { data, error } = await supabase
+      .from("admin_departments")
+      .select("department_id")
+      .eq("admin_id", adminId);
+
+    if (error) {
+      console.error("Failed to fetch admin departments:", error);
+      setAdminDepartmentIds([]);
+      return;
+    }
+
+    setAdminDepartmentIds((data || []).map(ad => ad.department_id));
+  };
 
   const fetchStats = async () => {
     try {
-      // Fetch employee stats
-      const { count: totalEmployees } = await supabase
-        .from("employees")
-        .select("*", { count: "exact", head: true });
+      const hasFilter = adminId && adminDepartmentIds.length > 0;
 
-      const { count: activeEmployees } = await supabase
-        .from("employees")
-        .select("*", { count: "exact", head: true })
-        .eq("is_active", true);
+      // Fetch employee stats (filtered by department)
+      let employeeQuery = supabase.from("employees").select("*", { count: "exact", head: true });
+      if (hasFilter) {
+        employeeQuery = employeeQuery.in("department_id", adminDepartmentIds);
+      }
+      const { count: totalEmployees } = await employeeQuery;
+
+      let activeEmployeeQuery = supabase.from("employees").select("*", { count: "exact", head: true }).eq("is_active", true);
+      if (hasFilter) {
+        activeEmployeeQuery = activeEmployeeQuery.in("department_id", adminDepartmentIds);
+      }
+      const { count: activeEmployees } = await activeEmployeeQuery;
 
       // Fetch department stats
-      const { count: totalDepartments } = await supabase
-        .from("departments")
-        .select("*", { count: "exact", head: true });
+      let departmentQuery = supabase.from("departments").select("*", { count: "exact", head: true });
+      if (hasFilter) {
+        departmentQuery = departmentQuery.in("id", adminDepartmentIds);
+      }
+      const { count: totalDepartments } = await departmentQuery;
 
-      // Fetch task stats
-      const { count: totalTasks } = await supabase
-        .from("tasks")
-        .select("*", { count: "exact", head: true });
+      // Fetch task stats (filtered by department)
+      let taskQuery = supabase.from("tasks").select("*", { count: "exact", head: true });
+      if (hasFilter) {
+        taskQuery = taskQuery.in("department_id", adminDepartmentIds);
+      }
+      const { count: totalTasks } = await taskQuery;
 
-      const { count: completedTasks } = await supabase
-        .from("tasks")
-        .select("*", { count: "exact", head: true })
-        .eq("status", "completed");
+      let completedQuery = supabase.from("tasks").select("*", { count: "exact", head: true }).eq("status", "completed");
+      if (hasFilter) {
+        completedQuery = completedQuery.in("department_id", adminDepartmentIds);
+      }
+      const { count: completedTasks } = await completedQuery;
 
-      const { count: pendingTasks } = await supabase
-        .from("tasks")
-        .select("*", { count: "exact", head: true })
-        .eq("status", "pending");
+      let pendingQuery = supabase.from("tasks").select("*", { count: "exact", head: true }).eq("status", "pending");
+      if (hasFilter) {
+        pendingQuery = pendingQuery.in("department_id", adminDepartmentIds);
+      }
+      const { count: pendingTasks } = await pendingQuery;
 
-      const { count: inProgressTasks } = await supabase
-        .from("tasks")
-        .select("*", { count: "exact", head: true })
-        .eq("status", "in_progress");
+      let inProgressQuery = supabase.from("tasks").select("*", { count: "exact", head: true }).eq("status", "in_progress");
+      if (hasFilter) {
+        inProgressQuery = inProgressQuery.in("department_id", adminDepartmentIds);
+      }
+      const { count: inProgressTasks } = await inProgressQuery;
 
       setStats({
         totalEmployees: totalEmployees || 0,
