@@ -136,7 +136,7 @@ const Admin = () => {
 
         {/* Content */}
         {activeTab === "overview" && <AdminStats adminId={employee.id} />}
-        {activeTab === "employees" && <EmployeeManagement />}
+        {activeTab === "employees" && <EmployeeManagement adminId={employee.id} />}
         {activeTab === "departments" && <DepartmentManagement adminId={employee.id} />}
         {activeTab === "tasks" && <AdminTaskAssignment adminId={employee.id} />}
         {activeTab === "verifications" && <TaskVerification adminId={employee.id} />}

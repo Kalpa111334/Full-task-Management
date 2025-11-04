@@ -29,12 +29,17 @@ interface Department {
   name: string;
 }
 
-const EmployeeManagement = () => {
+interface EmployeeManagementProps {
+  adminId?: string;
+}
+
+const EmployeeManagement = ({ adminId }: EmployeeManagementProps = {}) => {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
   const [selectedAdminDepartments, setSelectedAdminDepartments] = useState<string[]>([]);
+  const [adminDepartmentIds, setAdminDepartmentIds] = useState<string[]>([]);
   const [formData, setFormData] = useState({
     name: "",
     email: "",
@@ -45,57 +50,104 @@ const EmployeeManagement = () => {
   });
 
   useEffect(() => {
-    fetchEmployees();
-    fetchDepartments();
+    fetchAdminDepartments();
+  }, [adminId]);
 
-    // Subscribe to real-time updates for employees table
-    const channel = supabase
-      .channel("employees-changes")
-      .on(
-        "postgres_changes",
-        { event: "UPDATE", schema: "public", table: "employees" },
-        (payload) => {
-          // Update specific employee in state for real-time updates
-          if (payload.new && payload.new.id) {
-            setEmployees(prevEmployees =>
-              prevEmployees.map(emp =>
-                emp.id === payload.new.id ? { ...emp, ...payload.new } : emp
-              )
-            );
-          }
-        }
-      )
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "employees" },
-        () => {
-          fetchEmployees(); // Refetch all for new employees
-        }
-      )
-      .on(
-        "postgres_changes",
-        { event: "DELETE", schema: "public", table: "employees" },
-        (payload) => {
-          // Remove deleted employee from state
-          if (payload.old && payload.old.id) {
-            setEmployees(prevEmployees =>
-              prevEmployees.filter(emp => emp.id !== payload.old.id)
-            );
-          }
-        }
-      )
-      .subscribe();
+  useEffect(() => {
+    if (adminDepartmentIds.length > 0 || !adminId) {
+      fetchEmployees();
+      fetchDepartments();
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, []);
+      // Subscribe to real-time updates for employees table
+      const channel = supabase
+        .channel("employees-changes")
+        .on(
+          "postgres_changes",
+          { event: "UPDATE", schema: "public", table: "employees" },
+          (payload) => {
+            // Update specific employee in state for real-time updates
+            if (payload.new && payload.new.id) {
+              setEmployees(prevEmployees =>
+                prevEmployees.map(emp =>
+                  emp.id === payload.new.id ? { ...emp, ...payload.new } : emp
+                )
+              );
+            }
+          }
+        )
+        .on(
+          "postgres_changes",
+          { event: "INSERT", schema: "public", table: "employees" },
+          () => {
+            fetchEmployees(); // Refetch all for new employees
+          }
+        )
+        .on(
+          "postgres_changes",
+          { event: "DELETE", schema: "public", table: "employees" },
+          (payload) => {
+            // Remove deleted employee from state
+            if (payload.old && payload.old.id) {
+              setEmployees(prevEmployees =>
+                prevEmployees.filter(emp => emp.id !== payload.old.id)
+              );
+            }
+          }
+        )
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(channel);
+      };
+    }
+  }, [adminDepartmentIds]);
+
+  const fetchAdminDepartments = async () => {
+    if (!adminId) {
+      setAdminDepartmentIds([]);
+      return;
+    }
+
+    // Check if user is super_admin
+    const { data: employeeData } = await supabase
+      .from("employees")
+      .select("role")
+      .eq("id", adminId)
+      .single();
+
+    if (employeeData?.role === "super_admin") {
+      // Super admin sees all employees
+      setAdminDepartmentIds([]);
+      return;
+    }
+
+    // Fetch admin's assigned departments
+    const { data, error } = await supabase
+      .from("admin_departments")
+      .select("department_id")
+      .eq("admin_id", adminId);
+
+    if (error) {
+      console.error("Failed to fetch admin departments:", error);
+      setAdminDepartmentIds([]);
+      return;
+    }
+
+    setAdminDepartmentIds((data || []).map(ad => ad.department_id));
+  };
 
   const fetchEmployees = async () => {
-    const { data, error } = await supabase
+    let query = supabase
       .from("employees")
       .select("*")
       .order("created_at", { ascending: false });
+
+    // Filter by admin's departments if not super admin
+    if (adminId && adminDepartmentIds.length > 0) {
+      query = query.in("department_id", adminDepartmentIds);
+    }
+
+    const { data, error } = await query;
 
     if (error) {
       showError("Failed to fetch employees");
@@ -125,10 +177,17 @@ const EmployeeManagement = () => {
   };
 
   const fetchDepartments = async () => {
-    const { data, error } = await supabase
+    let query = supabase
       .from("departments")
       .select("id, name")
       .order("name");
+
+    // Filter by admin's departments if not super admin
+    if (adminId && adminDepartmentIds.length > 0) {
+      query = query.in("id", adminDepartmentIds);
+    }
+
+    const { data, error } = await query;
 
     if (error) {
       showError("Failed to fetch departments");
@@ -138,11 +197,11 @@ const EmployeeManagement = () => {
     setDepartments(data || []);
   };
 
-  const fetchAdminDepartments = async (adminId: string) => {
+  const loadAdminDepartments = async (employeeId: string) => {
     const { data, error } = await supabase
       .from("admin_departments")
       .select("department_id")
-      .eq("admin_id", adminId);
+      .eq("admin_id", employeeId);
 
     if (error) {
       console.error("Failed to fetch admin departments:", error);
@@ -449,7 +508,7 @@ const EmployeeManagement = () => {
 
     // Load admin departments if employee is admin or super_admin
     if (employee.role === "admin" || employee.role === "super_admin") {
-      const adminDepts = await fetchAdminDepartments(employee.id);
+      const adminDepts = await loadAdminDepartments(employee.id);
       setSelectedAdminDepartments(adminDepts);
     } else {
       setSelectedAdminDepartments([]);
