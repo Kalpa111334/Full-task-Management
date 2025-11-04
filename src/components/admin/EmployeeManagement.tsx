@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { showSuccess, showError, showConfirm } from "@/lib/sweetalert";
-import { Plus, Edit, Trash2, UserCheck, UserX } from "lucide-react";
+import { Plus, Edit, Trash2, UserCheck, UserX, Search, Eye, Filter } from "lucide-react";
 import { notifyEmployeeAdded, notifyEmployeeCredentials, notifyDepartmentHeadAssigned } from "@/lib/notificationService";
 import { notifyEmployeeRegistered, notifyDepartmentHeadRegistered } from "@/lib/whatsappService";
 import { Badge } from "@/components/ui/badge";
@@ -22,11 +22,22 @@ interface Employee {
   phone: string | null;
   is_active: boolean;
   admin_departments?: string[]; // Array of department names for admins
+  department?: { name: string };
 }
 
 interface Department {
   id: string;
   name: string;
+}
+
+interface EmployeeTask {
+  id: string;
+  title: string;
+  description: string | null;
+  status: string;
+  priority: string;
+  deadline: string | null;
+  department: { name: string } | null;
 }
 
 interface EmployeeManagementProps {
@@ -35,11 +46,18 @@ interface EmployeeManagementProps {
 
 const EmployeeManagement = ({ adminId }: EmployeeManagementProps = {}) => {
   const [employees, setEmployees] = useState<Employee[]>([]);
+  const [filteredEmployees, setFilteredEmployees] = useState<Employee[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
   const [selectedAdminDepartments, setSelectedAdminDepartments] = useState<string[]>([]);
   const [adminDepartmentIds, setAdminDepartmentIds] = useState<string[]>([]);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [filterDepartment, setFilterDepartment] = useState<string>("all");
+  const [filterRole, setFilterRole] = useState<string>("all");
+  const [viewingEmployeeTasks, setViewingEmployeeTasks] = useState<Employee | null>(null);
+  const [employeeTasks, setEmployeeTasks] = useState<EmployeeTask[]>([]);
+  const [loadingTasks, setLoadingTasks] = useState(false);
   const [formData, setFormData] = useState({
     name: "",
     email: "",
@@ -139,7 +157,10 @@ const EmployeeManagement = ({ adminId }: EmployeeManagementProps = {}) => {
   const fetchEmployees = async () => {
     let query = supabase
       .from("employees")
-      .select("*")
+      .select(`
+        *,
+        department:departments(name)
+      `)
       .order("created_at", { ascending: false });
 
     // Filter by admin's departments if not super admin
@@ -174,6 +195,7 @@ const EmployeeManagement = ({ adminId }: EmployeeManagementProps = {}) => {
     );
 
     setEmployees(employeesWithDepts || []);
+    setFilteredEmployees(employeesWithDepts || []);
   };
 
   const fetchDepartments = async () => {
@@ -209,6 +231,66 @@ const EmployeeManagement = ({ adminId }: EmployeeManagementProps = {}) => {
     }
 
     return (data || []).map(ad => ad.department_id);
+  };
+
+  // Filter employees based on search and filters
+  useEffect(() => {
+    let filtered = [...employees];
+
+    // Apply search filter
+    if (searchTerm) {
+      filtered = filtered.filter(emp => 
+        emp.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        emp.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        emp.phone?.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+    }
+
+    // Apply department filter
+    if (filterDepartment && filterDepartment !== "all") {
+      filtered = filtered.filter(emp => emp.department_id === filterDepartment);
+    }
+
+    // Apply role filter
+    if (filterRole && filterRole !== "all") {
+      filtered = filtered.filter(emp => emp.role === filterRole);
+    }
+
+    setFilteredEmployees(filtered);
+  }, [searchTerm, filterDepartment, filterRole, employees]);
+
+  // Fetch employee tasks
+  const fetchEmployeeTasks = async (employeeId: string) => {
+    setLoadingTasks(true);
+    try {
+      const { data, error } = await supabase
+        .from("tasks")
+        .select(`
+          id,
+          title,
+          description,
+          status,
+          priority,
+          deadline,
+          department:departments(name)
+        `)
+        .eq("assigned_to", employeeId)
+        .order("created_at", { ascending: false });
+
+      if (error) {
+        showError("Failed to fetch employee tasks");
+        return;
+      }
+
+      setEmployeeTasks(data || []);
+    } finally {
+      setLoadingTasks(false);
+    }
+  };
+
+  const viewEmployeeTasks = async (employee: Employee) => {
+    setViewingEmployeeTasks(employee);
+    await fetchEmployeeTasks(employee.id);
   };
 
   const updateAdminDepartments = async (adminId: string, departmentIds: string[]) => {
@@ -700,8 +782,61 @@ const EmployeeManagement = ({ adminId }: EmployeeManagementProps = {}) => {
         </Dialog>
       </div>
 
+      {/* Search and Filter Section */}
+      <Card className="p-4 mb-4">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="md:col-span-2">
+            <Label htmlFor="search" className="mb-2 block">Search Employees</Label>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                id="search"
+                placeholder="Search by name, email, or phone..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10"
+              />
+            </div>
+          </div>
+          <div>
+            <Label htmlFor="filterDept" className="mb-2 block">Filter by Department</Label>
+            <Select value={filterDepartment} onValueChange={setFilterDepartment}>
+              <SelectTrigger id="filterDept">
+                <SelectValue placeholder="All Departments" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Departments</SelectItem>
+                {departments.map((dept) => (
+                  <SelectItem key={dept.id} value={dept.id}>
+                    {dept.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label htmlFor="filterRole" className="mb-2 block">Filter by Role</Label>
+            <Select value={filterRole} onValueChange={setFilterRole}>
+              <SelectTrigger id="filterRole">
+                <SelectValue placeholder="All Roles" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Roles</SelectItem>
+                <SelectItem value="employee">Employee</SelectItem>
+                <SelectItem value="department_head">Department Head</SelectItem>
+                <SelectItem value="admin">Admin</SelectItem>
+                <SelectItem value="super_admin">Super Admin</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+        <div className="mt-3 text-sm text-muted-foreground">
+          Showing {filteredEmployees.length} of {employees.length} employees
+        </div>
+      </Card>
+
       <div className="grid gap-3 sm:gap-4">
-        {employees.map((employee) => (
+        {filteredEmployees.map((employee) => (
           <Card key={employee.id} className="p-3 sm:p-4">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
               <div className="flex-1 min-w-0">
@@ -728,6 +863,11 @@ const EmployeeManagement = ({ adminId }: EmployeeManagementProps = {}) => {
                 {employee.phone && (
                   <p className="text-xs sm:text-sm text-muted-foreground">Phone: {employee.phone}</p>
                 )}
+                {employee.department && (
+                  <p className="text-xs sm:text-sm text-muted-foreground">
+                    Department: {employee.department.name}
+                  </p>
+                )}
                 {(employee.role === "admin" || employee.role === "super_admin") && employee.admin_departments && employee.admin_departments.length > 0 && (
                   <div className="mt-2">
                     <p className="text-xs font-semibold text-muted-foreground mb-1">Manages Departments:</p>
@@ -741,7 +881,16 @@ const EmployeeManagement = ({ adminId }: EmployeeManagementProps = {}) => {
                   </div>
                 )}
               </div>
-              <div className="flex gap-1 sm:gap-2">
+              <div className="flex flex-wrap gap-1 sm:gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => viewEmployeeTasks(employee)}
+                  className="flex-1 sm:flex-none"
+                  title="View Tasks"
+                >
+                  <Eye className="h-3 w-3 sm:h-4 sm:w-4" />
+                </Button>
                 <Button
                   variant="outline"
                   size="sm"
@@ -761,6 +910,62 @@ const EmployeeManagement = ({ adminId }: EmployeeManagementProps = {}) => {
           </Card>
         ))}
       </div>
+
+      {/* Employee Tasks Dialog */}
+      <Dialog open={!!viewingEmployeeTasks} onOpenChange={(open) => !open && setViewingEmployeeTasks(null)}>
+        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              Tasks Assigned to {viewingEmployeeTasks?.name}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            {loadingTasks ? (
+              <p className="text-center text-muted-foreground">Loading tasks...</p>
+            ) : employeeTasks.length === 0 ? (
+              <p className="text-center text-muted-foreground">No tasks assigned to this employee.</p>
+            ) : (
+              <div className="space-y-3">
+                {employeeTasks.map((task) => (
+                  <Card key={task.id} className="p-4">
+                    <div className="space-y-2">
+                      <div className="flex justify-between items-start">
+                        <h4 className="font-semibold">{task.title}</h4>
+                        <div className="flex gap-2">
+                          <Badge variant={
+                            task.priority === 'high' ? 'destructive' :
+                            task.priority === 'medium' ? 'default' : 'secondary'
+                          }>
+                            {task.priority}
+                          </Badge>
+                          <Badge variant={
+                            task.status === 'completed' ? 'default' :
+                            task.status === 'in_progress' ? 'default' :
+                            task.status === 'pending' ? 'secondary' : 'outline'
+                          }>
+                            {task.status.replace('_', ' ')}
+                          </Badge>
+                        </div>
+                      </div>
+                      {task.description && (
+                        <p className="text-sm text-muted-foreground">{task.description}</p>
+                      )}
+                      <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
+                        {task.department && (
+                          <span>Department: {task.department.name}</span>
+                        )}
+                        {task.deadline && (
+                          <span>Due: {new Date(task.deadline).toLocaleDateString()}</span>
+                        )}
+                      </div>
+                    </div>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
