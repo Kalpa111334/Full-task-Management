@@ -56,25 +56,59 @@ export class SimpleTaskReassignmentService {
       const rejecterName = rejecterData?.name || 'Administrator';
 
       // Reassign the original task back to the employee
+      const updateData: any = {
+        status: 'pending',
+        assigned_to: originalEmployeeId,
+        completed_at: null,
+        completion_photo_url: null,
+        is_active: true
+      };
+
+      // Try to add rejection fields if they exist
+      try {
+        updateData.rejection_reason = rejectionReason;
+        updateData.rejection_count = (task.rejection_count || 0) + 1;
+      } catch (e) {
+        // Columns may not exist, continue without them
+        console.warn("Could not set rejection fields:", e);
+      }
+
       const { error: updateError } = await supabase
         .from('tasks')
-        .update({
-          status: 'pending',
-          assigned_to: originalEmployeeId,
-          completed_at: null,
-          completion_photo_url: null,
-          rejection_reason: rejectionReason,
-          rejection_count: (task.rejection_count || 0) + 1,
-          is_active: true
-        })
+        .update(updateData)
         .eq('id', taskId);
 
       if (updateError) {
         console.error('Failed to reassign task:', updateError);
-        return {
-          success: false,
-          message: 'Failed to reassign task'
-        };
+        // Try without optional rejection fields if they caused the error
+        if (updateError.message?.includes("rejection_reason") || 
+            updateError.message?.includes("rejection_count") ||
+            updateError.code === "42703") {
+          console.log("Retrying without rejection fields...");
+          const { error: fallbackError } = await supabase
+            .from('tasks')
+            .update({
+              status: 'pending',
+              assigned_to: originalEmployeeId,
+              completed_at: null,
+              completion_photo_url: null,
+              is_active: true
+            })
+            .eq('id', taskId);
+          
+          if (fallbackError) {
+            console.error('Fallback update also failed:', fallbackError);
+            return {
+              success: false,
+              message: `Failed to reassign task: ${fallbackError.message || "Unknown error"}`
+            };
+          }
+        } else {
+          return {
+            success: false,
+            message: `Failed to reassign task: ${updateError.message || "Unknown error"}`
+          };
+        }
       }
 
       // Send notifications

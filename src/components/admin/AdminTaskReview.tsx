@@ -193,6 +193,7 @@ const AdminTaskReview = ({ adminId }: AdminTaskReviewProps) => {
       updateData.admin_rejection_reason = rejectReason;
     } catch (e) {
       // Columns may not exist, continue without them
+      console.warn("Could not set admin review fields:", e);
     }
 
     const { error: updateError } = await supabase
@@ -201,21 +202,24 @@ const AdminTaskReview = ({ adminId }: AdminTaskReviewProps) => {
       .eq("id", selectedTask.id);
 
     if (updateError) {
+      console.error("Error updating task rejection status:", updateError);
       // If error is about missing columns, try without them
       if (updateError.message?.includes("admin_review_status") || 
           updateError.message?.includes("admin_rejection_reason") ||
           updateError.code === "42703") {
+        console.log("Retrying without admin review columns...");
         const { error: fallbackError } = await supabase
           .from("tasks")
           .update({ status: "pending" })
           .eq("id", selectedTask.id);
         
         if (fallbackError) {
-          showError("Failed to reject task");
+          console.error("Fallback update also failed:", fallbackError);
+          showError(`Failed to reject task: ${fallbackError.message || "Unknown error"}`);
           return;
         }
       } else {
-        showError("Failed to reject task");
+        showError(`Failed to reject task: ${updateError.message || "Unknown error"}`);
         return;
       }
     }
@@ -230,6 +234,7 @@ const AdminTaskReview = ({ adminId }: AdminTaskReviewProps) => {
     if (result.success) {
       showSuccess("Task rejected and automatically reassigned to department head. Department head notified via WhatsApp.");
     } else {
+      console.error("Task reassignment failed:", result.message);
       showError(result.message || "Task rejected but reassignment failed");
       return;
     }
