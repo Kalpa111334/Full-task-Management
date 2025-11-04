@@ -7,11 +7,12 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { showSuccess, showError, showConfirm } from "@/lib/sweetalert";
-import { Plus, Edit, Trash2, UserCheck, UserX, Search, Eye, Filter, Loader2 } from "lucide-react";
+import { Plus, Edit, Trash2, UserCheck, UserX, Search, Eye, Filter, Loader2, MapPin, Clock, User, Calendar, Power, PowerOff, Camera, CheckCircle2 } from "lucide-react";
 import { notifyEmployeeAdded, notifyEmployeeCredentials, notifyDepartmentHeadAssigned } from "@/lib/notificationService";
 import { notifyEmployeeRegistered, notifyDepartmentHeadRegistered } from "@/lib/whatsappService";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
+import { format } from "date-fns";
 
 interface Employee {
   id: string;
@@ -40,6 +41,26 @@ interface EmployeeTask {
   department: { name: string } | null;
 }
 
+interface TaskDetail {
+  id: string;
+  title: string;
+  description: string | null;
+  status: string;
+  priority: string;
+  deadline: string | null;
+  location_address: string | null;
+  location_lat: number | null;
+  location_lng: number | null;
+  is_active: boolean;
+  created_at: string;
+  started_at: string | null;
+  completed_at: string | null;
+  completion_photo_url: string | null;
+  employee?: { name: string; email: string } | null;
+  assigned_by_employee?: { name: string } | null;
+  department?: { name: string } | null;
+}
+
 interface EmployeeManagementProps {
   adminId?: string;
 }
@@ -58,6 +79,8 @@ const EmployeeManagement = ({ adminId }: EmployeeManagementProps = {}) => {
   const [viewingEmployeeTasks, setViewingEmployeeTasks] = useState<Employee | null>(null);
   const [employeeTasks, setEmployeeTasks] = useState<EmployeeTask[]>([]);
   const [loadingTasks, setLoadingTasks] = useState(false);
+  const [selectedTask, setSelectedTask] = useState<TaskDetail | null>(null);
+  const [loadingTaskDetail, setLoadingTaskDetail] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalTasks, setTotalTasks] = useState(0);
   const tasksPerPage = 5;
@@ -342,6 +365,36 @@ const EmployeeManagement = ({ adminId }: EmployeeManagementProps = {}) => {
       setCurrentPage(newPage);
       fetchEmployeeTasks(viewingEmployeeTasks.id, newPage);
     }
+  };
+
+  // Fetch detailed task information
+  const fetchTaskDetail = async (taskId: string) => {
+    setLoadingTaskDetail(true);
+    try {
+      const { data, error } = await supabase
+        .from("tasks")
+        .select(`
+          *,
+          employee:employees!tasks_assigned_to_fkey (name, email),
+          assigned_by_employee:employees!tasks_assigned_by_fkey (name),
+          department:departments (name)
+        `)
+        .eq("id", taskId)
+        .single();
+
+      if (error) {
+        showError("Failed to fetch task details");
+        return;
+      }
+
+      setSelectedTask(data);
+    } finally {
+      setLoadingTaskDetail(false);
+    }
+  };
+
+  const handleTaskClick = async (taskId: string) => {
+    await fetchTaskDetail(taskId);
   };
 
   const updateAdminDepartments = async (adminId: string, departmentIds: string[]) => {
@@ -980,7 +1033,11 @@ const EmployeeManagement = ({ adminId }: EmployeeManagementProps = {}) => {
               <p className="text-center text-muted-foreground py-8">No tasks assigned to this employee.</p>
             ) : (
               <div className="space-y-3">{employeeTasks.map((task) => (
-                  <Card key={task.id} className="p-4">
+                  <Card 
+                    key={task.id} 
+                    className="p-4 cursor-pointer hover:bg-accent transition-colors"
+                    onClick={() => handleTaskClick(task.id)}
+                  >
                     <div className="space-y-2">
                       <div className="flex justify-between items-start">
                         <h4 className="font-semibold">{task.title}</h4>
@@ -1078,6 +1135,197 @@ const EmployeeManagement = ({ adminId }: EmployeeManagementProps = {}) => {
               </div>
             )}
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Task Detail Dialog */}
+      <Dialog open={!!selectedTask} onOpenChange={(open) => !open && setSelectedTask(null)}>
+        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-2xl">Task Details</DialogTitle>
+          </DialogHeader>
+          
+          {loadingTaskDetail ? (
+            <div className="flex flex-col items-center justify-center py-12 space-y-3">
+              <Loader2 className="h-10 w-10 animate-spin text-primary" />
+              <p className="text-sm text-muted-foreground">Loading task details...</p>
+            </div>
+          ) : selectedTask ? (
+            <div className="space-y-6">
+              {/* Title and Status */}
+              <div className="space-y-3">
+                <h3 className="text-xl font-bold">{selectedTask.title}</h3>
+                <div className="flex flex-wrap gap-2">
+                  <Badge variant={
+                    selectedTask.priority === 'urgent' ? 'destructive' :
+                    selectedTask.priority === 'high' ? 'destructive' :
+                    selectedTask.priority === 'medium' ? 'default' : 'secondary'
+                  } className="text-sm">
+                    Priority: {selectedTask.priority}
+                  </Badge>
+                  <Badge variant={
+                    selectedTask.status === 'completed' ? 'default' :
+                    selectedTask.status === 'in_progress' ? 'default' :
+                    selectedTask.status === 'pending' ? 'secondary' : 'outline'
+                  } className="text-sm">
+                    Status: {selectedTask.status.replace('_', ' ')}
+                  </Badge>
+                  {selectedTask.is_active ? (
+                    <Badge variant="default" className="text-sm bg-green-500">
+                      <Power className="h-3 w-3 mr-1" />
+                      Active
+                    </Badge>
+                  ) : (
+                    <Badge variant="secondary" className="text-sm">
+                      <PowerOff className="h-3 w-3 mr-1" />
+                      Inactive
+                    </Badge>
+                  )}
+                </div>
+              </div>
+
+              {/* Description */}
+              {selectedTask.description && (
+                <Card className="p-4">
+                  <h4 className="font-semibold mb-2">Description</h4>
+                  <p className="text-muted-foreground whitespace-pre-wrap">{selectedTask.description}</p>
+                </Card>
+              )}
+
+              {/* Task Information Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Assigned To */}
+                {selectedTask.employee && (
+                  <Card className="p-4">
+                    <div className="flex items-start gap-3">
+                      <User className="h-5 w-5 mt-0.5 text-primary" />
+                      <div>
+                        <p className="text-sm font-semibold">Assigned To</p>
+                        <p className="text-sm text-muted-foreground">{selectedTask.employee.name}</p>
+                        {selectedTask.employee.email && (
+                          <p className="text-xs text-muted-foreground">{selectedTask.employee.email}</p>
+                        )}
+                      </div>
+                    </div>
+                  </Card>
+                )}
+
+                {/* Assigned By */}
+                {selectedTask.assigned_by_employee && (
+                  <Card className="p-4">
+                    <div className="flex items-start gap-3">
+                      <User className="h-5 w-5 mt-0.5 text-primary" />
+                      <div>
+                        <p className="text-sm font-semibold">Assigned By</p>
+                        <p className="text-sm text-muted-foreground">{selectedTask.assigned_by_employee.name}</p>
+                      </div>
+                    </div>
+                  </Card>
+                )}
+
+                {/* Department */}
+                {selectedTask.department && (
+                  <Card className="p-4">
+                    <div className="flex items-start gap-3">
+                      <User className="h-5 w-5 mt-0.5 text-primary" />
+                      <div>
+                        <p className="text-sm font-semibold">Department</p>
+                        <p className="text-sm text-muted-foreground">{selectedTask.department.name}</p>
+                      </div>
+                    </div>
+                  </Card>
+                )}
+
+                {/* Deadline */}
+                {selectedTask.deadline && (
+                  <Card className="p-4">
+                    <div className="flex items-start gap-3">
+                      <Calendar className="h-5 w-5 mt-0.5 text-primary" />
+                      <div>
+                        <p className="text-sm font-semibold">Deadline</p>
+                        <p className="text-sm text-muted-foreground">
+                          {format(new Date(selectedTask.deadline), "PPP")}
+                        </p>
+                      </div>
+                    </div>
+                  </Card>
+                )}
+
+                {/* Location */}
+                {selectedTask.location_address && (
+                  <Card className="p-4 md:col-span-2">
+                    <div className="flex items-start gap-3">
+                      <MapPin className="h-5 w-5 mt-0.5 text-primary" />
+                      <div>
+                        <p className="text-sm font-semibold">Location</p>
+                        <p className="text-sm text-muted-foreground">{selectedTask.location_address}</p>
+                        {selectedTask.location_lat && selectedTask.location_lng && (
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Coordinates: {selectedTask.location_lat.toFixed(6)}, {selectedTask.location_lng.toFixed(6)}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </Card>
+                )}
+              </div>
+
+              {/* Timeline */}
+              <Card className="p-4">
+                <h4 className="font-semibold mb-3">Timeline</h4>
+                <div className="space-y-3">
+                  <div className="flex items-start gap-3">
+                    <Clock className="h-4 w-4 mt-0.5 text-muted-foreground" />
+                    <div>
+                      <p className="text-sm font-medium">Created</p>
+                      <p className="text-sm text-muted-foreground">
+                        {format(new Date(selectedTask.created_at), "PPpp")}
+                      </p>
+                    </div>
+                  </div>
+                  
+                  {selectedTask.started_at && (
+                    <div className="flex items-start gap-3">
+                      <Clock className="h-4 w-4 mt-0.5 text-blue-500" />
+                      <div>
+                        <p className="text-sm font-medium">Started</p>
+                        <p className="text-sm text-muted-foreground">
+                          {format(new Date(selectedTask.started_at), "PPpp")}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                  
+                  {selectedTask.completed_at && (
+                    <div className="flex items-start gap-3">
+                      <CheckCircle2 className="h-4 w-4 mt-0.5 text-green-500" />
+                      <div>
+                        <p className="text-sm font-medium">Completed</p>
+                        <p className="text-sm text-muted-foreground">
+                          {format(new Date(selectedTask.completed_at), "PPpp")}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </Card>
+
+              {/* Completion Photo */}
+              {selectedTask.completion_photo_url && (
+                <Card className="p-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Camera className="h-5 w-5 text-primary" />
+                    <h4 className="font-semibold">Completion Photo</h4>
+                  </div>
+                  <img 
+                    src={selectedTask.completion_photo_url} 
+                    alt="Task completion" 
+                    className="w-full rounded-lg border"
+                  />
+                </Card>
+              )}
+            </div>
+          ) : null}
         </DialogContent>
       </Dialog>
     </div>
