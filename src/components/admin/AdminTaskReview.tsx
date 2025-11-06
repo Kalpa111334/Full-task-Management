@@ -45,17 +45,18 @@ const AdminTaskReview = ({ adminId }: AdminTaskReviewProps) => {
   const [rejectReason, setRejectReason] = useState("");
   const [showRejectDialog, setShowRejectDialog] = useState(false);
   const [adminDepartmentIds, setAdminDepartmentIds] = useState<string[]>([]);
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
 
   useEffect(() => {
     fetchAdminDepartments();
   }, [adminId]);
 
   useEffect(() => {
-    if (adminDepartmentIds.length > 0 || !adminId) {
+    if (adminDepartmentIds.length > 0 || !adminId || isSuperAdmin) {
       fetchTasks();
       setupRealtimeSubscription();
     }
-  }, [adminDepartmentIds]);
+  }, [adminDepartmentIds, isSuperAdmin]);
 
   const fetchAdminDepartments = async () => {
     if (!adminId) {
@@ -72,10 +73,12 @@ const AdminTaskReview = ({ adminId }: AdminTaskReviewProps) => {
 
     if (employeeData?.role === "super_admin") {
       // Super admin sees all tasks
+      setIsSuperAdmin(true);
       setAdminDepartmentIds([]);
       return;
     }
 
+    setIsSuperAdmin(false);
     // Fetch admin's assigned departments
     const { data, error } = await supabase
       .from("admin_departments")

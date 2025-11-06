@@ -73,6 +73,7 @@ const EmployeeManagement = ({ adminId }: EmployeeManagementProps = {}) => {
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
   const [selectedAdminDepartments, setSelectedAdminDepartments] = useState<string[]>([]);
   const [adminDepartmentIds, setAdminDepartmentIds] = useState<string[]>([]);
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterDepartment, setFilterDepartment] = useState<string>("all");
   const [filterRole, setFilterRole] = useState<string>("all");
@@ -98,7 +99,7 @@ const EmployeeManagement = ({ adminId }: EmployeeManagementProps = {}) => {
   }, [adminId]);
 
   useEffect(() => {
-    if (adminDepartmentIds.length > 0 || !adminId) {
+    if (adminDepartmentIds.length > 0 || !adminId || isSuperAdmin) {
       fetchEmployees();
       fetchDepartments();
 
@@ -144,11 +145,12 @@ const EmployeeManagement = ({ adminId }: EmployeeManagementProps = {}) => {
         supabase.removeChannel(channel);
       };
     }
-  }, [adminDepartmentIds]);
+  }, [adminDepartmentIds, isSuperAdmin]);
 
   const fetchAdminDepartments = async () => {
     if (!adminId) {
       setAdminDepartmentIds([]);
+      setIsSuperAdmin(false);
       return;
     }
 
@@ -161,9 +163,13 @@ const EmployeeManagement = ({ adminId }: EmployeeManagementProps = {}) => {
 
     if (employeeData?.role === "super_admin") {
       // Super admin sees all employees
+      setIsSuperAdmin(true);
       setAdminDepartmentIds([]);
       return;
     }
+
+    // Regular admin
+    setIsSuperAdmin(false);
 
     // Fetch admin's assigned departments
     const { data, error } = await supabase

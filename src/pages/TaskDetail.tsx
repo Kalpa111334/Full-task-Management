@@ -38,13 +38,27 @@ const TaskDetail = () => {
   const [task, setTask] = useState<Task | null>(null);
   const [loading, setLoading] = useState(true);
   const [currentUser, setCurrentUser] = useState<any>(null);
+  const [hasValidSession, setHasValidSession] = useState(false);
   const [completingTaskId, setCompletingTaskId] = useState<string | null>(null);
 
   useEffect(() => {
-    const employeeData = localStorage.getItem("employee");
-    if (employeeData) {
-      setCurrentUser(JSON.parse(employeeData));
+    // Check session validity
+    const sessionExpiry = localStorage.getItem("session_expiry");
+    const now = Date.now();
+    
+    if (sessionExpiry && parseInt(sessionExpiry) > now) {
+      setHasValidSession(true);
+      const employeeData = localStorage.getItem("employee");
+      if (employeeData) {
+        setCurrentUser(JSON.parse(employeeData));
+      }
+    } else {
+      setHasValidSession(false);
+      // Clear expired session
+      localStorage.removeItem("employee");
+      localStorage.removeItem("session_expiry");
     }
+    
     fetchTask();
 
     // Subscribe to real-time updates
@@ -156,8 +170,10 @@ const TaskDetail = () => {
     );
   }
 
-  const canManageTask = currentUser && (
+  // Only users with valid sessions can manage tasks
+  const canManageTask = hasValidSession && currentUser && (
     currentUser.role === "admin" ||
+    currentUser.role === "super_admin" ||
     (currentUser.role === "department_head" && task.department?.name) ||
     (currentUser.id === task.assigned_to)
   );
@@ -303,6 +319,23 @@ const TaskDetail = () => {
             <Card className="p-4 sm:p-6">
               <h3 className="font-semibold mb-4">Actions</h3>
               <div className="space-y-3">
+                {!hasValidSession && (
+                  <div className="p-4 bg-destructive/10 border border-destructive/20 rounded-lg">
+                    <p className="text-sm text-destructive font-medium mb-1">Session Expired</p>
+                    <p className="text-xs text-muted-foreground">
+                      Please log in to perform actions on this task.
+                    </p>
+                    <Button
+                      onClick={() => navigate("/login")}
+                      variant="outline"
+                      size="sm"
+                      className="w-full mt-3"
+                    >
+                      Go to Login
+                    </Button>
+                  </div>
+                )}
+                
                 {canManageTask && task.status === "pending" && task.is_active && (
                   <Button
                     onClick={handleStartTask}

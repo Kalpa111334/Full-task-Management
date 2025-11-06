@@ -26,6 +26,7 @@ const DepartmentManagement = ({ adminId }: DepartmentManagementProps = {}) => {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingDepartment, setEditingDepartment] = useState<Department | null>(null);
   const [adminDepartmentIds, setAdminDepartmentIds] = useState<string[]>([]);
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const [formData, setFormData] = useState({
     name: "",
     description: "",
@@ -36,15 +37,16 @@ const DepartmentManagement = ({ adminId }: DepartmentManagementProps = {}) => {
   }, [adminId]);
 
   useEffect(() => {
-    if (adminDepartmentIds.length > 0 || !adminId) {
+    if (adminDepartmentIds.length > 0 || !adminId || isSuperAdmin) {
       fetchDepartments();
     }
-  }, [adminDepartmentIds]);
+  }, [adminDepartmentIds, isSuperAdmin]);
 
   const fetchAdminDepartments = async () => {
     if (!adminId) {
       // Super admin or no filtering needed
       setAdminDepartmentIds([]);
+      setIsSuperAdmin(false);
       return;
     }
 
@@ -57,9 +59,13 @@ const DepartmentManagement = ({ adminId }: DepartmentManagementProps = {}) => {
 
     if (employeeData?.role === "super_admin") {
       // Super admin sees all departments
+      setIsSuperAdmin(true);
       setAdminDepartmentIds([]);
       return;
     }
+
+    // Regular admin
+    setIsSuperAdmin(false);
 
     // Fetch admin's assigned departments
     const { data, error } = await supabase

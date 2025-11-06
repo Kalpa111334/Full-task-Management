@@ -48,17 +48,18 @@ const TaskVerification = ({ adminId }: TaskVerificationProps) => {
   const [rejectReason, setRejectReason] = useState("");
   const [showRejectDialog, setShowRejectDialog] = useState(false);
   const [adminDepartmentIds, setAdminDepartmentIds] = useState<string[]>([]);
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
 
   useEffect(() => {
     fetchAdminDepartments();
   }, [adminId]);
 
   useEffect(() => {
-    if (adminDepartmentIds.length > 0 || !adminId) {
+    if (adminDepartmentIds.length > 0 || !adminId || isSuperAdmin) {
       fetchRequests();
       setupRealtimeSubscription();
     }
-  }, [adminDepartmentIds]);
+  }, [adminDepartmentIds, isSuperAdmin]);
 
   const fetchAdminDepartments = async () => {
     if (!adminId) {
@@ -75,10 +76,12 @@ const TaskVerification = ({ adminId }: TaskVerificationProps) => {
 
     if (employeeData?.role === "super_admin") {
       // Super admin sees all verification requests
+      setIsSuperAdmin(true);
       setAdminDepartmentIds([]);
       return;
     }
 
+    setIsSuperAdmin(false);
     // Fetch admin's assigned departments
     const { data, error } = await supabase
       .from("admin_departments")

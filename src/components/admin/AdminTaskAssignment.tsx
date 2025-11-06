@@ -40,6 +40,7 @@ interface DepartmentHead {
   id: string;
   name: string;
   email: string;
+  role: string;
   department_id: string;
   departments?: { name: string } | null;
 }
@@ -55,6 +56,7 @@ const AdminTaskAssignment = ({ adminId }: AdminTaskAssignmentProps) => {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [openDeptHeadDropdown, setOpenDeptHeadDropdown] = useState(false);
   const [adminDepartmentIds, setAdminDepartmentIds] = useState<string[]>([]);
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const [formData, setFormData] = useState({
     title: "",
     description: "",
@@ -77,7 +79,7 @@ const AdminTaskAssignment = ({ adminId }: AdminTaskAssignmentProps) => {
   }, [adminId]);
 
   useEffect(() => {
-    if (adminDepartmentIds.length > 0 || !adminId) {
+    if (adminDepartmentIds.length > 0 || !adminId || isSuperAdmin) {
       fetchTasks();
       fetchDepartmentHeads();
     }
@@ -93,7 +95,7 @@ const AdminTaskAssignment = ({ adminId }: AdminTaskAssignmentProps) => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [adminDepartmentIds]);
+  }, [adminDepartmentIds, isSuperAdmin]);
 
   const fetchAdminDepartments = async () => {
     if (!adminId) {
@@ -110,10 +112,12 @@ const AdminTaskAssignment = ({ adminId }: AdminTaskAssignmentProps) => {
 
     if (employeeData?.role === "super_admin") {
       // Super admin sees all tasks
+      setIsSuperAdmin(true);
       setAdminDepartmentIds([]);
       return;
     }
 
+    setIsSuperAdmin(false);
     // Fetch admin's assigned departments
     const { data, error } = await supabase
       .from("admin_departments")
@@ -156,29 +160,40 @@ const AdminTaskAssignment = ({ adminId }: AdminTaskAssignmentProps) => {
   };
 
   const fetchDepartmentHeads = async () => {
+    // Check if user is super admin
+    const employeeData = localStorage.getItem("employee");
+    const isSuperAdmin = employeeData && JSON.parse(employeeData).role === "super_admin";
+
     let query = supabase
       .from("employees")
       .select(`
         id,
         name,
         email,
+        role,
         department_id,
         departments (name)
       `)
       .eq("is_active", true)
-      .eq("role", "department_head")
-      .not("department_id", "is", null)
       .order("name");
 
-    // Filter by admin's departments if not super admin
-    if (adminId && adminDepartmentIds.length > 0) {
-      query = query.in("department_id", adminDepartmentIds);
+    // Super admin sees all employees, admins, and department heads
+    if (isSuperAdmin) {
+      // No filter - show everyone
+    } else {
+      // Regular admin - filter by role and departments
+      query = query.eq("role", "department_head").not("department_id", "is", null);
+      
+      // Filter by admin's departments
+      if (adminId && adminDepartmentIds.length > 0) {
+        query = query.in("department_id", adminDepartmentIds);
+      }
     }
 
     const { data, error } = await query;
 
     if (error) {
-      showError("Failed to fetch department heads");
+      showError("Failed to fetch employees");
       return;
     }
 
@@ -531,7 +546,7 @@ const AdminTaskAssignment = ({ adminId }: AdminTaskAssignmentProps) => {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="assigned_to">Assign to Department Head *</Label>
+                <Label htmlFor="assigned_to">Assign to Employee *</Label>
                 <Popover open={openDeptHeadDropdown} onOpenChange={setOpenDeptHeadDropdown}>
                   <PopoverTrigger asChild>
                     <Button
@@ -542,41 +557,54 @@ const AdminTaskAssignment = ({ adminId }: AdminTaskAssignmentProps) => {
                     >
                       {formData.assigned_to
                         ? (() => {
-                            const deptHead = departmentHeads.find((d) => d.id === formData.assigned_to);
-                            return deptHead ? `${deptHead.name} | ${deptHead.departments?.name || "No Department"}` : "Select department head";
+                            const employee = departmentHeads.find((d) => d.id === formData.assigned_to);
+                            const roleLabel = employee?.role === "super_admin" ? "Super Admin" :
+                                            employee?.role === "admin" ? "Admin" :
+                                            employee?.role === "department_head" ? "Dept Head" : "Employee";
+                            return employee ? `${employee.name} (${roleLabel}) | ${employee.departments?.name || "No Department"}` : "Select employee";
                           })()
-                        : "Select department head"}
+                        : "Select employee"}
                       <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                     </Button>
                   </PopoverTrigger>
                   <PopoverContent className="w-full p-0" align="start">
                     <Command>
-                      <CommandInput placeholder="Search department heads..." />
+                      <CommandInput placeholder="Search employees..." />
                       <CommandList>
-                        <CommandEmpty>No department head found.</CommandEmpty>
+                        <CommandEmpty>No employee found.</CommandEmpty>
                         <CommandGroup>
-                          {departmentHeads.map((deptHead) => (
-                            <CommandItem
-                              key={deptHead.id}
-                              value={`${deptHead.name} | ${deptHead.departments?.name || "No Department"}`}
-                              onSelect={() => {
-                                setFormData({ 
-                                  ...formData, 
-                                  assigned_to: deptHead.id,
-                                  department_id: deptHead.department_id 
-                                });
-                                setOpenDeptHeadDropdown(false);
-                              }}
-                            >
-                              <Check
-                                className={cn(
-                                  "mr-2 h-4 w-4",
-                                  formData.assigned_to === deptHead.id ? "opacity-100" : "opacity-0"
-                                )}
-                              />
-                              {deptHead.name} | {deptHead.departments?.name || "No Department"}
-                            </CommandItem>
-                          ))}
+                          {departmentHeads.map((employee) => {
+                            const roleLabel = employee.role === "super_admin" ? "Super Admin" :
+                                            employee.role === "admin" ? "Admin" :
+                                            employee.role === "department_head" ? "Dept Head" : "Employee";
+                            return (
+                              <CommandItem
+                                key={employee.id}
+                                value={`${employee.name} ${roleLabel} ${employee.departments?.name || ""}`}
+                                onSelect={() => {
+                                  setFormData({ 
+                                    ...formData, 
+                                    assigned_to: employee.id,
+                                    department_id: employee.department_id 
+                                  });
+                                  setOpenDeptHeadDropdown(false);
+                                }}
+                              >
+                                <Check
+                                  className={cn(
+                                    "mr-2 h-4 w-4",
+                                    formData.assigned_to === employee.id ? "opacity-100" : "opacity-0"
+                                  )}
+                                />
+                                <div className="flex flex-col">
+                                  <span>{employee.name} ({roleLabel})</span>
+                                  <span className="text-xs text-muted-foreground">
+                                    {employee.departments?.name || "No Department"}
+                                  </span>
+                                </div>
+                              </CommandItem>
+                            );
+                          })}
                         </CommandGroup>
                       </CommandList>
                     </Command>

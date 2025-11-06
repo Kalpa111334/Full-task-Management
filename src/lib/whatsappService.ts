@@ -358,13 +358,16 @@ export const notifyDeptHeadTaskProofReceived = async (
 
   console.log('✅ Phone found, sending WhatsApp to:', phone);
 
+  const baseUrl = window.location.origin;
+  const reviewUrl = `${baseUrl}/task-action/${taskId}`;
   const taskUrl = getTaskUrl(taskId);
 
   let message = `📸 *Task Proof Received*\n\n` +
     `Hello! *${employeeName}* has submitted completion proof for a task.\n\n` +
     `📋 *Task:* ${taskTitle}\n\n` +
-    `🔗 *Click here to review the task:*\n${taskUrl}\n\n` +
-    `Please review the completion proof and approve or reject the task.\n\n` +
+    `✅ *Review & Approve/Reject:*\n${reviewUrl}\n\n` +
+    `📄 *View Details Only:*\n${taskUrl}\n\n` +
+    `Please review the completion proof and approve or reject the task. You must be logged in (with valid session) to perform these actions.\n\n` +
     `_Task Management System_`;
 
   const result = await sendWhatsAppMessage({

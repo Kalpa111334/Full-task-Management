@@ -37,6 +37,9 @@ const Login = () => {
       }
 
       localStorage.setItem("employee", JSON.stringify(data));
+      // Set session expiry to 30 days
+      const sessionExpiry = Date.now() + 30 * 24 * 60 * 60 * 1000; // 30 days
+      localStorage.setItem("session_expiry", String(sessionExpiry));
       // Enable background location publishing for 24 hours
       localStorage.setItem("location_active_until", String(Date.now() + 24 * 60 * 60 * 1000));
       showSuccess("Welcome back!");

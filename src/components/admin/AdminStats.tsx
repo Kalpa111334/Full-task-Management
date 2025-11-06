@@ -18,20 +18,22 @@ const AdminStats = ({ adminId }: AdminStatsProps = {}) => {
     inProgressTasks: 0,
   });
   const [adminDepartmentIds, setAdminDepartmentIds] = useState<string[]>([]);
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
 
   useEffect(() => {
     fetchAdminDepartments();
   }, [adminId]);
 
   useEffect(() => {
-    if (adminDepartmentIds.length > 0 || !adminId) {
+    if (adminDepartmentIds.length > 0 || !adminId || isSuperAdmin) {
       fetchStats();
     }
-  }, [adminDepartmentIds]);
+  }, [adminDepartmentIds, isSuperAdmin]);
 
   const fetchAdminDepartments = async () => {
     if (!adminId) {
       setAdminDepartmentIds([]);
+      setIsSuperAdmin(false);
       return;
     }
 
@@ -44,9 +46,13 @@ const AdminStats = ({ adminId }: AdminStatsProps = {}) => {
 
     if (employeeData?.role === "super_admin") {
       // Super admin sees all stats
+      setIsSuperAdmin(true);
       setAdminDepartmentIds([]);
       return;
     }
+
+    // Regular admin
+    setIsSuperAdmin(false);
 
     // Fetch admin's assigned departments
     const { data, error } = await supabase
