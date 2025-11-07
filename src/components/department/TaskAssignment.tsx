@@ -31,6 +31,7 @@ interface Task {
   location_address: string | null;
   assigned_to: string | null;
   is_active: boolean;
+  created_at?: string;
   employee?: { name: string };
 }
 
@@ -61,6 +62,7 @@ const TaskAssignment = ({ departmentId, assignedBy }: TaskAssignmentProps) => {
     task_type: "normal",
     location_address: "",
     deadline: undefined as Date | undefined,
+    deadlineTime: "09:00" as string,
     attachment: null as File | null,
     is_recurring: false,
     recurrence_type: "daily" as "daily" | "weekly" | "monthly" | null,
@@ -350,7 +352,14 @@ const TaskAssignment = ({ departmentId, assignedBy }: TaskAssignmentProps) => {
         priority: formData.priority as "low" | "medium" | "high" | "urgent",
         task_type: formData.task_type,
         location_address: formData.location_address || null,
-        deadline: formData.deadline?.toISOString() || null,
+        deadline: formData.deadline && formData.deadlineTime 
+          ? (() => {
+              const [hours, minutes] = formData.deadlineTime.split(':');
+              const deadlineWithTime = new Date(formData.deadline);
+              deadlineWithTime.setHours(parseInt(hours), parseInt(minutes), 0, 0);
+              return deadlineWithTime.toISOString();
+            })()
+          : formData.deadline?.toISOString() || null,
         status: "pending",
         is_recurring: formData.is_recurring || false,
         recurrence_type: formData.is_recurring && formData.recurrence_type ? formData.recurrence_type : null,
@@ -410,6 +419,7 @@ const TaskAssignment = ({ departmentId, assignedBy }: TaskAssignmentProps) => {
       task_type: "normal",
       location_address: "",
       deadline: undefined,
+      deadlineTime: "09:00",
       attachment: null,
       is_recurring: false,
       recurrence_type: "daily",
@@ -614,6 +624,20 @@ const TaskAssignment = ({ departmentId, assignedBy }: TaskAssignmentProps) => {
                       />
                     </PopoverContent>
                   </Popover>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="deadlineTime">Deadline Time</Label>
+                  <div className="flex items-center gap-2">
+                    <Clock className="h-4 w-4 text-muted-foreground" />
+                    <Input
+                      id="deadlineTime"
+                      type="time"
+                      value={formData.deadlineTime}
+                      onChange={(e) => setFormData({ ...formData, deadlineTime: e.target.value })}
+                      className="flex-1"
+                    />
+                  </div>
                 </div>
               </div>
 
@@ -831,7 +855,7 @@ const TaskAssignment = ({ departmentId, assignedBy }: TaskAssignmentProps) => {
               {task.deadline && (
                 <div className="flex items-center gap-2 text-muted-foreground">
                   <Clock className="h-4 w-4" />
-                  <span>{format(new Date(task.deadline), "PPP")}</span>
+                  <span>{format(new Date(task.deadline), "PPP 'at' hh:mm a")}</span>
                 </div>
               )}
             </div>
@@ -948,7 +972,7 @@ const TaskAssignment = ({ departmentId, assignedBy }: TaskAssignmentProps) => {
                       {task.deadline && (
                         <div className="flex items-center gap-2 text-muted-foreground">
                           <Clock className="h-4 w-4" />
-                          <span>{format(new Date(task.deadline), "PPP")}</span>
+                          <span>{format(new Date(task.deadline), "PPP 'at' hh:mm a")}</span>
                         </div>
                       )}
             </div>

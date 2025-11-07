@@ -66,6 +66,7 @@ const AdminTaskAssignment = ({ adminId }: AdminTaskAssignmentProps) => {
     task_type: "normal",
     location_address: "",
     deadline: undefined as Date | undefined,
+    deadlineTime: "09:00" as string,
     is_required: false,
     attachment: null as File | null,
     is_recurring: false,
@@ -353,7 +354,14 @@ const AdminTaskAssignment = ({ adminId }: AdminTaskAssignmentProps) => {
       priority: formData.priority as "low" | "medium" | "high" | "urgent",
       task_type: formData.task_type,
       location_address: formData.location_address || null,
-      deadline: formData.deadline?.toISOString() || null,
+      deadline: formData.deadline && formData.deadlineTime 
+        ? (() => {
+            const [hours, minutes] = formData.deadlineTime.split(':');
+            const deadlineWithTime = new Date(formData.deadline);
+            deadlineWithTime.setHours(parseInt(hours), parseInt(minutes), 0, 0);
+            return deadlineWithTime.toISOString();
+          })()
+        : formData.deadline?.toISOString() || null,
       status: "pending",
       is_recurring: formData.is_recurring || false,
       recurrence_type: formData.is_recurring && formData.recurrence_type ? formData.recurrence_type : null,
@@ -443,6 +451,7 @@ const AdminTaskAssignment = ({ adminId }: AdminTaskAssignmentProps) => {
       task_type: "normal",
       location_address: "",
       deadline: undefined,
+      deadlineTime: "09:00",
       is_required: false,
       attachment: null,
       is_recurring: false,
@@ -648,6 +657,20 @@ const AdminTaskAssignment = ({ adminId }: AdminTaskAssignmentProps) => {
                       />
                     </PopoverContent>
                   </Popover>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="deadlineTime">Deadline Time</Label>
+                  <div className="flex items-center gap-2">
+                    <Clock className="h-4 w-4 text-muted-foreground" />
+                    <Input
+                      id="deadlineTime"
+                      type="time"
+                      value={formData.deadlineTime}
+                      onChange={(e) => setFormData({ ...formData, deadlineTime: e.target.value })}
+                      className="flex-1"
+                    />
+                  </div>
                 </div>
               </div>
 
@@ -882,7 +905,7 @@ const AdminTaskAssignment = ({ adminId }: AdminTaskAssignmentProps) => {
               {task.deadline && (
                 <div className="flex items-center gap-2 text-muted-foreground">
                   <Clock className="h-4 w-4" />
-                  <span>{format(new Date(task.deadline), "MMM dd, yyyy")}</span>
+                  <span>{format(new Date(task.deadline), "MMM dd, yyyy 'at' hh:mm a")}</span>
                 </div>
               )}
             </div>
@@ -991,7 +1014,7 @@ const AdminTaskAssignment = ({ adminId }: AdminTaskAssignmentProps) => {
                       {task.deadline && (
                         <div className="flex items-center gap-2 text-muted-foreground">
                           <Clock className="h-4 w-4" />
-                          <span>{format(new Date(task.deadline), "MMM dd, yyyy")}</span>
+                          <span>{format(new Date(task.deadline), "MMM dd, yyyy 'at' hh:mm a")}</span>
                         </div>
                       )}
                     </div>
