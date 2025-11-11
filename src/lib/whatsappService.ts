@@ -149,7 +149,9 @@ export const notifyDeptHeadTaskAssigned = async (
   taskTitle: string,
   deptHeadId: string,
   assignedByName: string,
-  taskId?: string
+  taskId?: string,
+  startTime?: string,
+  endTime?: string
 ): Promise<boolean> => {
   console.log('📨 Starting WhatsApp notification for dept head:', deptHeadId);
   
@@ -164,7 +166,13 @@ export const notifyDeptHeadTaskAssigned = async (
 
   let message = `🎯 *New Task Assigned*\n\n` +
     `Hello! You have been assigned a new task by *${assignedByName}*.\n\n` +
-    `📋 *Task:* ${taskTitle}\n\n`;
+    `📋 *Task:* ${taskTitle}\n`;
+
+  if (startTime && endTime) {
+    message += `⏰ *Working Hours:* ${startTime} - ${endTime}\n`;
+  }
+
+  message += `\n`;
 
   if (taskId) {
     const taskUrl = getTaskUrl(taskId);
@@ -193,7 +201,9 @@ export const notifyEmployeeTaskAssigned = async (
   assignedByName: string,
   deadline?: string | null,
   priority?: string,
-  taskId?: string
+  taskId?: string,
+  startTime?: string,
+  endTime?: string
 ): Promise<boolean> => {
   console.log('📨 Starting WhatsApp notification for employee:', employeeId);
   
@@ -218,6 +228,10 @@ export const notifyEmployeeTaskAssigned = async (
       urgent: '🔴'
     }[priority] || '⚪';
     message += `${priorityEmoji} *Priority:* ${priority.toUpperCase()}\n`;
+  }
+
+  if (startTime && endTime) {
+    message += `⏰ *Working Hours:* ${startTime} - ${endTime}\n`;
   }
 
   if (deadline) {

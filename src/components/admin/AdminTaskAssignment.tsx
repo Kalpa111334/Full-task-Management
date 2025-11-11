@@ -81,7 +81,8 @@ const AdminTaskAssignment = ({ adminId }: AdminTaskAssignmentProps) => {
     task_type: "normal",
     location_address: "",
     deadline: undefined as Date | undefined,
-    deadlineTime: "09:00" as string,
+    start_time: "09:00" as string,
+    end_time: "17:00" as string,
     is_required: false,
     attachment: null as File | null,
     is_recurring: false,
@@ -391,14 +392,9 @@ const AdminTaskAssignment = ({ adminId }: AdminTaskAssignmentProps) => {
       priority: formData.priority as "low" | "medium" | "high" | "urgent",
       task_type: formData.task_type,
       location_address: formData.location_address || null,
-      deadline: formData.deadline && formData.deadlineTime 
-        ? (() => {
-            const [hours, minutes] = formData.deadlineTime.split(':');
-            const deadlineWithTime = new Date(formData.deadline);
-            deadlineWithTime.setHours(parseInt(hours), parseInt(minutes), 0, 0);
-            return deadlineWithTime.toISOString();
-          })()
-        : formData.deadline?.toISOString() || null,
+      deadline: formData.deadline?.toISOString() || null,
+      start_time: formData.start_time,
+      end_time: formData.end_time,
       status: "pending",
       is_recurring: formData.is_recurring || false,
       recurrence_type: formData.is_recurring && formData.recurrence_type ? formData.recurrence_type : null,
@@ -469,8 +465,15 @@ const AdminTaskAssignment = ({ adminId }: AdminTaskAssignmentProps) => {
       const taskId = newTask[0]?.id;
       // Send push notification
       await notifyTaskAssigned(formData.title, formData.assigned_to, adminName);
-      // Send WhatsApp notification
-      await notifyDeptHeadTaskAssigned(formData.title, formData.assigned_to, adminName, taskId);
+      // Send WhatsApp notification with start and end times
+      await notifyDeptHeadTaskAssigned(
+        formData.title, 
+        formData.assigned_to, 
+        adminName, 
+        taskId,
+        formData.start_time,
+        formData.end_time
+      );
     }
 
     setIsDialogOpen(false);
@@ -488,7 +491,8 @@ const AdminTaskAssignment = ({ adminId }: AdminTaskAssignmentProps) => {
       task_type: "normal",
       location_address: "",
       deadline: undefined,
-      deadlineTime: "09:00",
+      start_time: "09:00",
+      end_time: "17:00",
       is_required: false,
       attachment: null,
       is_recurring: false,
@@ -745,15 +749,31 @@ const AdminTaskAssignment = ({ adminId }: AdminTaskAssignmentProps) => {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="deadlineTime">Deadline Time</Label>
+                  <Label htmlFor="start_time">Task Start Time *</Label>
                   <div className="flex items-center gap-2">
                     <Clock className="h-4 w-4 text-muted-foreground" />
                     <Input
-                      id="deadlineTime"
+                      id="start_time"
                       type="time"
-                      value={formData.deadlineTime}
-                      onChange={(e) => setFormData({ ...formData, deadlineTime: e.target.value })}
+                      value={formData.start_time}
+                      onChange={(e) => setFormData({ ...formData, start_time: e.target.value })}
                       className="flex-1"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="end_time">Task End Time *</Label>
+                  <div className="flex items-center gap-2">
+                    <Clock className="h-4 w-4 text-muted-foreground" />
+                    <Input
+                      id="end_time"
+                      type="time"
+                      value={formData.end_time}
+                      onChange={(e) => setFormData({ ...formData, end_time: e.target.value })}
+                      className="flex-1"
+                      required
                     />
                   </div>
                 </div>
