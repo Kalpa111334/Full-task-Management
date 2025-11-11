@@ -55,17 +55,11 @@ const TaskVerification = ({ adminId }: TaskVerificationProps) => {
   }, [adminId]);
 
   useEffect(() => {
-    if (!(adminDepartmentIds.length > 0 || !adminId || isSuperAdmin)) {
-      return;
+    if (adminDepartmentIds.length > 0 || !adminId || isSuperAdmin) {
+      fetchRequests();
+      setupRealtimeSubscription();
     }
-
-    fetchRequests();
-    const cleanup = setupRealtimeSubscription();
-
-    return () => {
-      cleanup();
-    };
-  }, [adminDepartmentIds, adminId, isSuperAdmin]);
+  }, [adminDepartmentIds, isSuperAdmin]);
 
   const fetchAdminDepartments = async () => {
     if (!adminId) {
@@ -202,11 +196,6 @@ const TaskVerification = ({ adminId }: TaskVerificationProps) => {
     
     // Send notifications to employee and department head
     if (request) {
-      const { task } = request;
-      const taskTitle = task?.title ?? "Task";
-      const assignedTo = task?.assigned_to;
-      const requesterId = request.requested_by;
-
       const { data: adminData } = await supabase
         .from("employees")
         .select("name")
@@ -216,19 +205,17 @@ const TaskVerification = ({ adminId }: TaskVerificationProps) => {
       const adminName = adminData?.name || "Admin";
       
       // Push notifications
-      if (assignedTo) {
-        await notifyTaskApproved(taskTitle, adminName, assignedTo);
+      if (request.task.assigned_to) {
+        await notifyTaskApproved(request.task.title, adminName, request.task.assigned_to);
       }
       
-      if (assignedTo && requesterId) {
-        await notifyTaskVerificationApproved(taskTitle, assignedTo, requesterId);
-      }
+      await notifyTaskVerificationApproved(request.task.title, request.task.assigned_to, request.requested_by);
 
       // WhatsApp notification to employee about admin verification approval
-      if (assignedTo) {
+      if (request.task.assigned_to) {
         await notifyAdminVerificationApproved(
-          taskTitle,
-          assignedTo,
+          request.task.title,
+          request.task.assigned_to,
           adminName,
           taskId
         );
@@ -292,34 +279,29 @@ const TaskVerification = ({ adminId }: TaskVerificationProps) => {
         .single();
       
       const adminName = adminData?.name || "Admin";
-      const taskTitle = selectedRequest.task?.title ?? "Task";
-      const assignedTo = selectedRequest.task?.assigned_to;
-      const requesterId = selectedRequest.requested_by;
       
       // Push notifications
-      if (requesterId) {
-        await notifyTaskVerificationRejected(
-          taskTitle,
-          requesterId,
-          adminName
-        );
-      }
+      await notifyTaskVerificationRejected(
+        selectedRequest.task.title,
+        selectedRequest.requested_by,
+        adminName
+      );
       
-      if (assignedTo) {
+      if (selectedRequest.task.assigned_to) {
         await notifyTaskRejected(
-          taskTitle,
+          selectedRequest.task.title,
           adminName,
-          assignedTo,
+          selectedRequest.task.assigned_to,
           rejectReason
         );
       }
 
       // WhatsApp notifications for admin verification rejection
-      if (assignedTo && requesterId) {
+      if (selectedRequest.task.assigned_to) {
         await notifyAdminVerificationRejected(
-          taskTitle,
-          assignedTo,
-          requesterId,
+          selectedRequest.task.title,
+          selectedRequest.task.assigned_to,
+          selectedRequest.requested_by,
           adminName,
           rejectReason,
           selectedRequest.task_id
@@ -350,21 +332,6 @@ const TaskVerification = ({ adminId }: TaskVerificationProps) => {
         return <Badge variant="outline">{status}</Badge>;
     }
   };
-
-  const formatDateTime = (dateString?: string | null) =>
-    dateString ? new Date(dateString).toLocaleString() : "Not provided";
-
-  const getTaskTitle = (request: VerificationRequest) =>
-    request.task?.title ?? "Task Details Unavailable";
-
-  const getTaskDescription = (request: VerificationRequest) =>
-    request.task?.description ?? "No task description provided.";
-
-  const getEmployeeName = (request: VerificationRequest) =>
-    request.task?.employee?.name ?? "Unknown";
-
-  const getRequesterName = (request: VerificationRequest) =>
-    request.requester?.name ?? "Unknown";
 
   const pendingRequests = requests.filter(r => r.status === "pending");
   const processedRequests = requests.filter(r => r.status !== "pending");
@@ -397,28 +364,28 @@ const TaskVerification = ({ adminId }: TaskVerificationProps) => {
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-2">
-                      <h4 className="text-lg font-semibold">{getTaskTitle(request)}</h4>
+                      <h4 className="text-lg font-semibold">{request.task.title}</h4>
                       {getStatusBadge(request.status)}
                     </div>
                     <p className="text-sm text-muted-foreground mb-3">
-                      {getTaskDescription(request)}
+                      {request.task.description}
                     </p>
                     <div className="grid grid-cols-2 gap-4 text-sm">
                       <div>
                         <span className="font-medium">Employee:</span>{" "}
-                        {getEmployeeName(request)}
+                        {request.task.employee.name}
                       </div>
                       <div>
                         <span className="font-medium">Verified by:</span>{" "}
-                        {getRequesterName(request)}
+                        {request.requester.name}
                       </div>
                       <div>
                         <span className="font-medium">Completed:</span>{" "}
-                        {formatDateTime(request.task?.completed_at)}
+                        {new Date(request.task.completed_at).toLocaleString()}
                       </div>
                       <div>
                         <span className="font-medium">Requested:</span>{" "}
-                        {formatDateTime(request.created_at)}
+                        {new Date(request.created_at).toLocaleString()}
                       </div>
                     </div>
                   </div>
@@ -453,12 +420,12 @@ const TaskVerification = ({ adminId }: TaskVerificationProps) => {
               <div className="flex items-start justify-between">
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-2">
-                    <h4 className="font-semibold">{getTaskTitle(request)}</h4>
+                    <h4 className="font-semibold">{request.task.title}</h4>
                     {getStatusBadge(request.status)}
                   </div>
                   <div className="grid grid-cols-2 gap-4 text-sm text-muted-foreground">
-                    <div>Employee: {getEmployeeName(request)}</div>
-                    <div>Verified by: {getRequesterName(request)}</div>
+                    <div>Employee: {request.task.employee.name}</div>
+                    <div>Verified by: {request.requester.name}</div>
                   </div>
                   {request.admin_reason && (
                     <div className="mt-3 p-3 bg-muted rounded-md">
