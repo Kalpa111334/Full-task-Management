@@ -32,6 +32,7 @@ interface Task {
   assigned_to: string | null;
   is_active: boolean;
   created_at?: string;
+  completion_photo_url?: string | null;
   employee?: { name: string };
   department?: { name: string };
 }
@@ -910,6 +911,15 @@ const AdminTaskAssignment = ({ adminId }: AdminTaskAssignmentProps) => {
               )}
             </div>
 
+            {task.status === "completed" && (task as any).completion_photo_url && (
+              <div className="mb-3 p-2 bg-success/10 border border-success/20 rounded-lg">
+                <p className="text-xs text-success font-medium flex items-center gap-1">
+                  <Check className="h-3 w-3" />
+                  Has completion proof photo - Click to view
+                </p>
+              </div>
+            )}
+
             <div className="flex gap-2">
               <Button
                 size="sm"
@@ -1018,6 +1028,15 @@ const AdminTaskAssignment = ({ adminId }: AdminTaskAssignmentProps) => {
                         </div>
                       )}
                     </div>
+
+                    {(task as any).completion_photo_url && (
+                      <div className="mb-3 p-2 bg-success/10 border border-success/20 rounded-lg">
+                        <p className="text-xs text-success font-medium flex items-center gap-1">
+                          <Check className="h-3 w-3" />
+                          Has completion proof photo - Click to view
+                        </p>
+                      </div>
+                    )}
 
                     <div className="flex gap-2">
                       <Button

@@ -26,14 +26,17 @@ interface VerificationRequest {
     assigned_to: string;
     status: string;
     completed_at: string;
-    employee: {
+    department_id?: string;
+    employee?: {
       name: string;
       email: string;
+      role?: string;
     };
   };
   requester: {
     name: string;
     email: string;
+    role?: string;
   };
 }
 
@@ -51,117 +54,172 @@ const TaskVerification = ({ adminId }: TaskVerificationProps) => {
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
 
   useEffect(() => {
-    fetchAdminDepartments();
+    if (adminId) {
+      fetchAdminDepartments();
+    } else {
+      console.warn("TaskVerification: No adminId provided");
+      setLoading(false);
+    }
   }, [adminId]);
 
   useEffect(() => {
+    console.log("TaskVerification useEffect:", { 
+      adminDepartmentIds: adminDepartmentIds.length, 
+      adminId, 
+      isSuperAdmin 
+    });
+    
     if (adminDepartmentIds.length > 0 || !adminId || isSuperAdmin) {
       fetchRequests();
-      setupRealtimeSubscription();
+      
+      // Subscribe to real-time updates
+      const channel = supabase
+        .channel("task-verifications")
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "task_verification_requests",
+          },
+          () => {
+            fetchRequests();
+          }
+        )
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(channel);
+      };
+    } else {
+      console.log("TaskVerification: Waiting for department data...");
     }
   }, [adminDepartmentIds, isSuperAdmin]);
 
   const fetchAdminDepartments = async () => {
-    if (!adminId) {
+    try {
+      if (!adminId) {
+        console.log("TaskVerification: No adminId, setting empty departments");
+        setAdminDepartmentIds([]);
+        setIsSuperAdmin(false);
+        return;
+      }
+
+      console.log("TaskVerification: Fetching admin departments for", adminId);
+
+      // Check if user is super_admin
+      const { data: employeeData, error: employeeError } = await supabase
+        .from("employees")
+        .select("role")
+        .eq("id", adminId)
+        .single();
+
+      if (employeeError) {
+        console.error("TaskVerification: Error fetching employee role:", employeeError);
+        setAdminDepartmentIds([]);
+        setIsSuperAdmin(false);
+        return;
+      }
+
+      console.log("TaskVerification: Employee role:", employeeData?.role);
+
+      if (employeeData?.role === "super_admin") {
+        // Super admin sees all verification requests
+        console.log("TaskVerification: User is super admin");
+        setIsSuperAdmin(true);
+        setAdminDepartmentIds([]);
+        return;
+      }
+
+      setIsSuperAdmin(false);
+      
+      // Fetch admin's assigned departments
+      const { data, error } = await supabase
+        .from("admin_departments")
+        .select("department_id")
+        .eq("admin_id", adminId);
+
+      if (error) {
+        console.error("TaskVerification: Failed to fetch admin departments:", error);
+        setAdminDepartmentIds([]);
+        return;
+      }
+
+      const deptIds = (data || []).map(ad => ad.department_id);
+      console.log("TaskVerification: Admin department IDs:", deptIds);
+      setAdminDepartmentIds(deptIds);
+    } catch (err) {
+      console.error("TaskVerification: Exception in fetchAdminDepartments:", err);
       setAdminDepartmentIds([]);
-      return;
+      setIsSuperAdmin(false);
     }
-
-    // Check if user is super_admin
-    const { data: employeeData } = await supabase
-      .from("employees")
-      .select("role")
-      .eq("id", adminId)
-      .single();
-
-    if (employeeData?.role === "super_admin") {
-      // Super admin sees all verification requests
-      setIsSuperAdmin(true);
-      setAdminDepartmentIds([]);
-      return;
-    }
-
-    setIsSuperAdmin(false);
-    // Fetch admin's assigned departments
-    const { data, error } = await supabase
-      .from("admin_departments")
-      .select("department_id")
-      .eq("admin_id", adminId);
-
-    if (error) {
-      console.error("Failed to fetch admin departments:", error);
-      setAdminDepartmentIds([]);
-      return;
-    }
-
-    setAdminDepartmentIds((data || []).map(ad => ad.department_id));
   };
 
   const fetchRequests = async () => {
-    setLoading(true);
+    try {
+      setLoading(true);
     
-    let query = supabase
-      .from("task_verification_requests")
-      .select(`
-        *,
-        task:tasks!task_verification_requests_task_id_fkey (
-          title,
-          description,
-          assigned_to,
-          status,
-          completed_at,
-          department_id,
-          employee:employees!tasks_assigned_to_fkey (
+      let query = supabase
+        .from("task_verification_requests")
+        .select(`
+          *,
+          task:tasks (
+            title,
+            description,
+            assigned_to,
+            status,
+            completed_at,
+            department_id,
+            assigned_employee:employees!tasks_assigned_to_fkey (
+              name,
+              email,
+              role
+            )
+          ),
+          requester:employees!task_verification_requests_requested_by_fkey (
             name,
-            email
+            email,
+            role
           )
-        ),
-        requester:employees!task_verification_requests_requested_by_fkey (
-          name,
-          email
-        )
-      `)
-      .order("created_at", { ascending: false });
+        `)
+        .order("created_at", { ascending: false });
 
-    const { data, error } = await query;
+      const { data, error } = await query;
 
-    if (error) {
-      showError("Failed to load verification requests");
-      setLoading(false);
-      return;
-    }
+      if (error) {
+        console.error("Error fetching verification requests:", error);
+        showError("Failed to load verification requests");
+        setLoading(false);
+        return;
+      }
 
-    // Filter by admin's departments if not super admin
-    let filteredData = data || [];
-    if (adminId && adminDepartmentIds.length > 0) {
-      filteredData = (data || []).filter((request: any) => 
-        request.task?.department_id && adminDepartmentIds.includes(request.task.department_id)
-      );
-    }
+      console.log("TaskVerification: Raw data from query:", data);
 
-    setRequests(filteredData);
-    setLoading(false);
-  };
-
-  const setupRealtimeSubscription = () => {
-    const channel = supabase
-      .channel("task-verifications")
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "task_verification_requests",
-        },
-        () => {
-          fetchRequests();
+      // Transform data to match interface
+      const transformedData = (data || []).map((request: any) => ({
+        ...request,
+        task: {
+          ...request.task,
+          employee: request.task?.assigned_employee || null
         }
-      )
-      .subscribe();
+      }));
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
+      // Filter by admin's departments if not super admin
+      let filteredData = transformedData;
+      if (!isSuperAdmin && adminId && adminDepartmentIds.length > 0) {
+        filteredData = transformedData.filter((request: any) => 
+          request.task?.department_id && adminDepartmentIds.includes(request.task.department_id)
+        );
+      }
+
+      console.log("TaskVerification: Filtered data:", filteredData);
+      setRequests(filteredData);
+    } catch (err) {
+      console.error("Exception in fetchRequests:", err);
+      showError("An error occurred while loading verification requests");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleApprove = async (requestId: string, taskId: string) => {
@@ -336,8 +394,23 @@ const TaskVerification = ({ adminId }: TaskVerificationProps) => {
   const pendingRequests = requests.filter(r => r.status === "pending");
   const processedRequests = requests.filter(r => r.status !== "pending");
 
+  console.log("TaskVerification render:", { 
+    loading, 
+    requestsCount: requests.length, 
+    pendingCount: pendingRequests.length,
+    adminId,
+    isSuperAdmin
+  });
+
   if (loading) {
-    return <div className="text-center py-8">Loading...</div>;
+    return (
+      <div className="flex items-center justify-center py-12">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Loading verification requests...</p>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -358,30 +431,37 @@ const TaskVerification = ({ adminId }: TaskVerificationProps) => {
             <Clock className="h-5 w-5 text-yellow-500" />
             Pending Approvals ({pendingRequests.length})
           </h3>
-          {pendingRequests.map((request) => (
+          {pendingRequests.map((request) => {
+            if (!request || !request.task || !request.requester) {
+              console.error("Invalid request data:", request);
+              return null;
+            }
+            return (
             <Card key={request.id} className="p-6 border-l-4 border-l-yellow-500">
               <div className="space-y-4">
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-2">
-                      <h4 className="text-lg font-semibold">{request.task.title}</h4>
+                      <h4 className="text-lg font-semibold">{request.task.title || "Untitled Task"}</h4>
                       {getStatusBadge(request.status)}
                     </div>
                     <p className="text-sm text-muted-foreground mb-3">
-                      {request.task.description}
+                      {request.task.description || "No description"}
                     </p>
                     <div className="grid grid-cols-2 gap-4 text-sm">
                       <div>
-                        <span className="font-medium">Employee:</span>{" "}
-                        {request.task.employee.name}
+                        <span className="font-medium">
+                          {request.task.employee?.role === "department_head" ? "Dept Head:" : "Employee:"}
+                        </span>{" "}
+                        {request.task.employee?.name || request.requester?.name || "Unknown"}
                       </div>
                       <div>
                         <span className="font-medium">Verified by:</span>{" "}
-                        {request.requester.name}
+                        {request.requester.name || "Unknown"}
                       </div>
                       <div>
                         <span className="font-medium">Completed:</span>{" "}
-                        {new Date(request.task.completed_at).toLocaleString()}
+                        {request.task.completed_at ? new Date(request.task.completed_at).toLocaleString() : "N/A"}
                       </div>
                       <div>
                         <span className="font-medium">Requested:</span>{" "}
@@ -408,24 +488,33 @@ const TaskVerification = ({ adminId }: TaskVerificationProps) => {
                 </div>
               </div>
             </Card>
-          ))}
+            );
+          })}
         </div>
       )}
 
       {processedRequests.length > 0 && (
         <div className="space-y-4">
           <h3 className="text-lg font-semibold">Processed Requests</h3>
-          {processedRequests.map((request) => (
+          {processedRequests.map((request) => {
+            if (!request || !request.task || !request.requester) {
+              console.error("Invalid processed request data:", request);
+              return null;
+            }
+            return (
             <Card key={request.id} className="p-6">
               <div className="flex items-start justify-between">
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-2">
-                    <h4 className="font-semibold">{request.task.title}</h4>
+                    <h4 className="font-semibold">{request.task.title || "Untitled Task"}</h4>
                     {getStatusBadge(request.status)}
                   </div>
                   <div className="grid grid-cols-2 gap-4 text-sm text-muted-foreground">
-                    <div>Employee: {request.task.employee.name}</div>
-                    <div>Verified by: {request.requester.name}</div>
+                    <div>
+                      {request.task.employee?.role === "department_head" ? "Dept Head: " : "Employee: "}
+                      {request.task.employee?.name || request.requester?.name || "Unknown"}
+                    </div>
+                    <div>Verified by: {request.requester.name || "Unknown"}</div>
                   </div>
                   {request.admin_reason && (
                     <div className="mt-3 p-3 bg-muted rounded-md">
@@ -438,7 +527,8 @@ const TaskVerification = ({ adminId }: TaskVerificationProps) => {
                 </div>
               </div>
             </Card>
-          ))}
+            );
+          })}
         </div>
       )}
 

@@ -301,13 +301,27 @@ const TaskDetail = () => {
                 )}
 
                 {task.completion_photo_url && (
-                  <div className="mt-4">
-                    <p className="text-sm text-muted-foreground mb-2">Completion Photo</p>
-                    <img
-                      src={task.completion_photo_url}
-                      alt="Task completion"
-                      className="rounded-lg max-w-full h-auto max-h-96 object-contain border"
-                    />
+                  <div className="mt-6 pt-6 border-t">
+                    <div className="flex items-center gap-2 mb-3">
+                      <Camera className="h-5 w-5 text-success" />
+                      <h3 className="font-semibold text-success">Task Completion Proof Photo</h3>
+                    </div>
+                    <div className="relative group">
+                      <img
+                        src={task.completion_photo_url}
+                        alt="Task completion proof"
+                        className="rounded-lg w-full h-auto object-contain border-2 border-success/20 cursor-pointer hover:border-success/40 transition-all"
+                        onClick={() => window.open(task.completion_photo_url!, '_blank')}
+                      />
+                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 rounded-lg transition-all flex items-center justify-center opacity-0 group-hover:opacity-100">
+                        <p className="text-white text-sm font-medium bg-black/50 px-3 py-1 rounded">
+                          Click to view full size
+                        </p>
+                      </div>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-2 text-center">
+                      Photo submitted on {task.completed_at ? format(new Date(task.completed_at), "PPpp") : "Unknown date"}
+                    </p>
                   </div>
                 )}
               </div>
