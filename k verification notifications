@@ -1,0 +1,184 @@
+[1mdiff --git a/src/components/admin/TaskVerification.tsx b/src/components/admin/TaskVerification.tsx[m
+[1mindex 8b68a2a..e5b7e43 100644[m
+[1m--- a/src/components/admin/TaskVerification.tsx[m
+[1m+++ b/src/components/admin/TaskVerification.tsx[m
+[36m@@ -55,11 +55,17 @@[m [mconst TaskVerification = ({ adminId }: TaskVerificationProps) => {[m
+   }, [adminId]);[m
+ [m
+   useEffect(() => {[m
+[31m-    if (adminDepartmentIds.length > 0 || !adminId || isSuperAdmin) {[m
+[31m-      fetchRequests();[m
+[31m-      setupRealtimeSubscription();[m
+[32m+[m[32m    if (!(adminDepartmentIds.length > 0 || !adminId || isSuperAdmin)) {[m
+[32m+[m[32m      return;[m
+     }[m
+[31m-  }, [adminDepartmentIds, isSuperAdmin]);[m
+[32m+[m
+[32m+[m[32m    fetchRequests();[m
+[32m+[m[32m    const cleanup = setupRealtimeSubscription();[m
+[32m+[m
+[32m+[m[32m    return () => {[m
+[32m+[m[32m      cleanup();[m
+[32m+[m[32m    };[m
+[32m+[m[32m  }, [adminDepartmentIds, adminId, isSuperAdmin]);[m
+ [m
+   const fetchAdminDepartments = async () => {[m
+     if (!adminId) {[m
+[36m@@ -196,6 +202,11 @@[m [mconst TaskVerification = ({ adminId }: TaskVerificationProps) => {[m
+     [m
+     // Send notifications to employee and department head[m
+     if (request) {[m
+[32m+[m[32m      const { task } = request;[m
+[32m+[m[32m      const taskTitle = task?.title ?? "Task";[m
+[32m+[m[32m      const assignedTo = task?.assigned_to;[m
+[32m+[m[32m      const requesterId = request.requested_by;[m
+[32m+[m
+       const { data: adminData } = await supabase[m
+         .from("employees")[m
+         .select("name")[m
+[36m@@ -205,17 +216,19 @@[m [mconst TaskVerification = ({ adminId }: TaskVerificationProps) => {[m
+       const adminName = adminData?.name || "Admin";[m
+       [m
+       // Push notifications[m
+[31m-      if (request.task.assigned_to) {[m
+[31m-        await notifyTaskApproved(request.task.title, adminName, request.task.assigned_to);[m
+[32m+[m[32m      if (assignedTo) {[m
+[32m+[m[32m        await notifyTaskApproved(taskTitle, adminName, assignedTo);[m
+       }[m
+       [m
+[31m-      await notifyTaskVerificationApproved(request.task.title, request.task.assigned_to, request.requested_by);[m
+[32m+[m[32m      if (assignedTo && requesterId) {[m
+[32m+[m[32m        await notifyTaskVerificationApproved(taskTitle, assignedTo, requesterId);[m
+[32m+[m[32m      }[m
+ [m
+       // WhatsApp notification to employee about admin verification approval[m
+[31m-      if (request.task.assigned_to) {[m
+[32m+[m[32m      if (assignedTo) {[m
+         await notifyAdminVerificationApproved([m
+[31m-          request.task.title,[m
+[31m-          request.task.assigned_to,[m
+[32m+[m[32m          taskTitle,[m
+[32m+[m[32m          assignedTo,[m
+           adminName,[m
+           taskId[m
+         );[m
+[36m@@ -279,29 +292,34 @@[m [mconst TaskVerification = ({ adminId }: TaskVerificationProps) => {[m
+         .single();[m
+       [m
+       const adminName = adminData?.name || "Admin";[m
+[32m+[m[32m      const taskTitle = selectedRequest.task?.title ?? "Task";[m
+[32m+[m[32m      const assignedTo = selectedRequest.task?.assigned_to;[m
+[32m+[m[32m      const requesterId = selectedRequest.requested_by;[m
+       [m
+       // Push notifications[m
+[31m-      await notifyTaskVerificationRejected([m
+[31m-        selectedRequest.task.title,[m
+[31m-        selectedRequest.requested_by,[m
+[31m-        adminName[m
+[31m-      );[m
+[32m+[m[32m      if (requesterId) {[m
+[32m+[m[32m        await notifyTaskVerificationRejected([m
+[32m+[m[32m          taskTitle,[m
+[32m+[m[32m          requesterId,[m
+[32m+[m[32m          adminName[m
+[32m+[m[32m        );[m
+[32m+[m[32m      }[m
+       [m
+[31m-      if (selectedRequest.task.assigned_to) {[m
+[32m+[m[32m      if (assignedTo) {[m
+         await notifyTaskRejected([m
+[31m-          selectedRequest.task.title,[m
+[32m+[m[32m          taskTitle,[m
+           adminName,[m
+[31m-          selectedRequest.task.assigned_to,[m
+[32m+[m[32m          assignedTo,[m
+           rejectReason[m
+         );[m
+       }[m
+ [m
+       // WhatsApp notifications for admin verification rejection[m
+[31m-      if (selectedRequest.task.assigned_to) {[m
+[32m+[m[32m      if (assignedTo && requesterId) {[m
+         await notifyAdminVerificationRejected([m
+[31m-          selectedRequest.task.title,[m
+[31m-          selectedRequest.task.assigned_to,[m
+[31m-          selectedRequest.requested_by,[m
+[32m+[m[32m          taskTitle,[m
+[32m+[m[32m          assignedTo,[m
+[32m+[m[32m          requesterId,[m
+           adminName,[m
+           rejectReason,[m
+           selectedRequest.task_id[m
+[36m@@ -333,6 +351,21 @@[m [mconst TaskVerification = ({ adminId }: TaskVerificationProps) => {[m
+     }[m
+   };[m
+ [m
+[32m+[m[32m  const formatDateTime = (dateString?: string | null) =>[m
+[32m+[m[32m    dateString ? new Date(dateString).toLocaleString() : "Not provided";[m
+[32m+[m
+[32m+[m[32m  const getTaskTitle = (request: VerificationRequest) =>[m
+[32m+[m[32m    request.task?.title ?? "Task Details Unavailable";[m
+[32m+[m
+[32m+[m[32m  const getTaskDescription = (request: VerificationRequest) =>[m
+[32m+[m[32m    request.task?.description ?? "No task description provided.";[m
+[32m+[m
+[32m+[m[32m  const getEmployeeName = (request: VerificationRequest) =>[m
+[32m+[m[32m    request.task?.employee?.name ?? "Unknown";[m
+[32m+[m
+[32m+[m[32m  const getRequesterName = (request: VerificationRequest) =>[m
+[32m+[m[32m    request.requester?.name ?? "Unknown";[m
+[32m+[m
+   const pendingRequests = requests.filter(r => r.status === "pending");[m
+   const processedRequests = requests.filter(r => r.status !== "pending");[m
+ [m
+[36m@@ -364,28 +397,28 @@[m [mconst TaskVerification = ({ adminId }: TaskVerificationProps) => {[m
+                 <div className="flex items-start justify-between">[m
+                   <div className="flex-1">[m
+                     <div className="flex items-center gap-2 mb-2">[m
+[31m-                      <h4 className="text-lg font-semibold">{request.task.title}</h4>[m
+[32m+[m[32m                      <h4 className="text-lg font-semibold">{getTaskTitle(request)}</h4>[m
+                       {getStatusBadge(request.status)}[m
+                     </div>[m
+                     <p className="text-sm text-muted-foreground mb-3">[m
+[31m-                      {request.task.description}[m
+[32m+[m[32m                      {getTaskDescription(request)}[m
+                     </p>[m
+                     <div className="grid grid-cols-2 gap-4 text-sm">[m
+                       <div>[m
+                         <span className="font-medium">Employee:</span>{" "}[m
+[31m-                        {request.task.employee.name}[m
+[32m+[m[32m                        {getEmployeeName(request)}[m
+                       </div>[m
+                       <div>[m
+                         <span className="font-medium">Verified by:</span>{" "}[m
+[31m-                        {request.requester.name}[m
+[32m+[m[32m                        {getRequesterName(request)}[m
+                       </div>[m
+                       <div>[m
+                         <span className="font-medium">Completed:</span>{" "}[m
+[31m-                        {new Date(request.task.completed_at).toLocaleString()}[m
+[32m+[m[32m                        {formatDateTime(request.task?.completed_at)}[m
+                       </div>[m
+                       <div>[m
+                         <span className="font-medium">Requested:</span>{" "}[m
+[31m-                        {new Date(request.created_at).toLocaleString()}[m
+[32m+[m[32m                        {formatDateTime(request.created_at)}[m
+                       </div>[m
+                     </div>[m
+                   </div>[m
+[36m@@ -420,12 +453,12 @@[m [mconst TaskVerification = ({ adminId }: TaskVerificationProps) => {[m
+               <div className="flex items-start justify-between">[m
+                 <div className="flex-1">[m
+                   <div className="flex items-center gap-2 mb-2">[m
+[31m-                    <h4 className="font-semibold">{request.task.title}</h4>[m
+[32m+[m[32m                    <h4 className="font-semibold">{getTaskTitle(request)}</h4>[m
+                     {getStatusBadge(request.status)}[m
+                   </div>[m
+                   <div className="grid grid-cols-2 gap-4 text-sm text-muted-foreground">[m
+[31m-                    <div>Employee: {request.task.employee.name}</div>[m
+[31m-                    <div>Verified by: {request.requester.name}</div>[m
+[32m+[m[32m                    <div>Employee: {getEmployeeName(request)}</div>[m
+[32m+[m[32m                    <div>Verified by: {getRequesterName(request)}</div>[m
+                   </div>[m
+                   {request.admin_reason && ([m
+                     <div className="mt-3 p-3 bg-muted rounded-md">[m
