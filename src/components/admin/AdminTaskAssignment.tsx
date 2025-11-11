@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { showSuccess, showError, showConfirm } from "@/lib/sweetalert";
-import { Plus, MapPin, Clock, User, Check, ChevronsUpDown, Power, PowerOff, Trash2, Paperclip, X, Repeat } from "lucide-react";
+import { Plus, MapPin, Clock, User, Check, ChevronsUpDown, Power, PowerOff, Trash2, Paperclip, X, Repeat, Search, Filter, Building2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { format } from "date-fns";
 import { Calendar } from "@/components/ui/calendar";
@@ -20,6 +20,7 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { Checkbox } from "@/components/ui/checkbox";
 import { notifyTaskAssigned, notifyTaskDeactivated, notifyTaskActivated, notifyTaskDeleted } from "@/lib/notificationService";
 import { notifyDeptHeadTaskAssigned } from "@/lib/whatsappService";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 interface Task {
   id: string;
@@ -33,8 +34,14 @@ interface Task {
   is_active: boolean;
   created_at?: string;
   completion_photo_url?: string | null;
+  department_id?: string | null;
   employee?: { name: string };
   department?: { name: string };
+}
+
+interface Department {
+  id: string;
+  name: string;
 }
 
 interface DepartmentHead {
@@ -53,11 +60,18 @@ interface AdminTaskAssignmentProps {
 const AdminTaskAssignment = ({ adminId }: AdminTaskAssignmentProps) => {
   const navigate = useNavigate();
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [departments, setDepartments] = useState<Department[]>([]);
   const [departmentHeads, setDepartmentHeads] = useState<DepartmentHead[]>([]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [openDeptHeadDropdown, setOpenDeptHeadDropdown] = useState(false);
   const [adminDepartmentIds, setAdminDepartmentIds] = useState<string[]>([]);
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+  
+  // Filter states
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedDepartment, setSelectedDepartment] = useState<string>("all");
+  const [activeTab, setActiveTab] = useState<string>("all");
+  
   const [formData, setFormData] = useState({
     title: "",
     description: "",
@@ -84,6 +98,7 @@ const AdminTaskAssignment = ({ adminId }: AdminTaskAssignmentProps) => {
     if (adminDepartmentIds.length > 0 || !adminId || isSuperAdmin) {
       fetchTasks();
       fetchDepartmentHeads();
+      fetchDepartments();
     }
 
     // Subscribe to real-time updates
@@ -159,6 +174,27 @@ const AdminTaskAssignment = ({ adminId }: AdminTaskAssignmentProps) => {
     // Sort tasks: pending/in_progress at top, completed at bottom
     const sortedTasks = sortTasksByStatus(data || []);
     setTasks(sortedTasks);
+  };
+
+  const fetchDepartments = async () => {
+    let query = supabase
+      .from("departments")
+      .select("id, name")
+      .order("name");
+
+    // Filter by admin's departments if not super admin
+    if (adminId && adminDepartmentIds.length > 0 && !isSuperAdmin) {
+      query = query.in("id", adminDepartmentIds);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      console.error("Failed to fetch departments:", error);
+      return;
+    }
+
+    setDepartments(data || []);
   };
 
   const fetchDepartmentHeads = async () => {
@@ -481,12 +517,60 @@ const AdminTaskAssignment = ({ adminId }: AdminTaskAssignmentProps) => {
     return colors[status as keyof typeof colors] || colors.pending;
   };
 
+  // Filter and categorize tasks
+  const filteredTasks = tasks.filter(task => {
+    // Search filter
+    const matchesSearch = searchQuery === "" || 
+      task.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      task.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      task.employee?.name.toLowerCase().includes(searchQuery.toLowerCase());
+
+    // Department filter
+    const matchesDepartment = selectedDepartment === "all" || 
+      task.department_id === selectedDepartment;
+
+    return matchesSearch && matchesDepartment;
+  });
+
+  // Categorize tasks
+  const pendingTasks = filteredTasks.filter(t => t.status === "pending");
+  const inProgressTasks = filteredTasks.filter(t => t.status === "in_progress");
+  const completedTasks = filteredTasks.filter(t => t.status === "completed");
+  const newTodayTasks = filteredTasks.filter(t => isTaskNewToday(t.created_at) && t.status === "pending");
+
+  // Get task counts
+  const taskCounts = {
+    all: filteredTasks.length,
+    pending: pendingTasks.length,
+    in_progress: inProgressTasks.length,
+    completed: completedTasks.length,
+    new: newTodayTasks.length,
+  };
+
+  // Get tasks to display based on active tab
+  const getTasksForTab = () => {
+    switch (activeTab) {
+      case "pending":
+        return pendingTasks;
+      case "in_progress":
+        return inProgressTasks;
+      case "completed":
+        return completedTasks;
+      case "new":
+        return newTodayTasks;
+      default:
+        return filteredTasks;
+    }
+  };
+
+  const tasksToDisplay = getTasksForTab();
+
   return (
     <div>
       <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3 sm:gap-4 mb-6">
         <div>
           <h2 className="text-lg sm:text-2xl font-bold">Task Assignment</h2>
-          <p className="text-xs sm:text-sm text-muted-foreground">Assign tasks to department heads</p>
+          <p className="text-xs sm:text-sm text-muted-foreground">Manage and assign tasks efficiently</p>
         </div>
         <Dialog open={isDialogOpen} onOpenChange={(open) => {
           setIsDialogOpen(open);
@@ -495,7 +579,7 @@ const AdminTaskAssignment = ({ adminId }: AdminTaskAssignmentProps) => {
           <DialogTrigger asChild>
             <Button className="bg-gradient-primary w-full sm:w-auto" size="sm">
               <Plus className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-2" />
-              Assign Task to Dept Head
+              Assign Task
             </Button>
           </DialogTrigger>
           <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
@@ -842,143 +926,96 @@ const AdminTaskAssignment = ({ adminId }: AdminTaskAssignmentProps) => {
         </Dialog>
       </div>
 
-      {/* Tasks Grid */}
-      <div className="space-y-6">
-        {/* Pending/In Progress Tasks */}
-        {tasks.filter(t => t.status !== "completed").length > 0 && (
-          <div>
-            <h3 className="text-sm font-semibold mb-3">
-              Active Tasks ({tasks.filter(t => t.status !== "completed").length})
-            </h3>
-            <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
-              {tasks
-                .filter(t => t.status !== "completed")
-                .map((task) => {
-                  const isNewToday = isTaskNewToday(task.created_at);
-                  return (
-                    <Card 
-                      key={task.id} 
-                      className={`p-3 sm:p-4 hover:shadow-lg transition-all animate-fade-in cursor-pointer ${
-                        isNewToday ? "border-l-4 border-l-primary bg-primary/5" : ""
-                      }`}
-                      onClick={() => navigate(`/task/${task.id}`)}
-                    >
-            <div className="flex items-start justify-between mb-3">
-              <div className="flex-1">
-                <h3 className="font-semibold text-sm sm:text-base mb-1">{task.title}</h3>
-                {task.description && (
-                  <p className="text-sm text-muted-foreground line-clamp-2 mb-2">{task.description}</p>
-                )}
-              </div>
-            </div>
-
-            <div className="flex flex-wrap gap-2 mb-3">
-              <Badge className={getPriorityColor(task.priority)}>
-                {task.priority}
-              </Badge>
-              <Badge className={getStatusColor(task.status)}>
-                {task.status.replace("_", " ")}
-              </Badge>
-              <Badge variant={task.is_active ? "default" : "secondary"}>
-                {task.is_active ? "Active" : "Inactive"}
-              </Badge>
-            </div>
-
-            <div className="space-y-2 text-sm mb-3">
-              {task.employee?.name && (
-                <div className="flex items-center gap-2 text-muted-foreground">
-                  <User className="h-4 w-4" />
-                  <span>{task.employee.name}</span>
-                </div>
-              )}
-              {task.department?.name && (
-                <div className="flex items-center gap-2 text-muted-foreground">
-                  <User className="h-4 w-4" />
-                  <span>Dept: {task.department.name}</span>
-                </div>
-              )}
-              {task.location_address && (
-                <div className="flex items-center gap-2 text-muted-foreground">
-                  <MapPin className="h-4 w-4" />
-                  <span className="truncate">{task.location_address}</span>
-                </div>
-              )}
-              {task.deadline && (
-                <div className="flex items-center gap-2 text-muted-foreground">
-                  <Clock className="h-4 w-4" />
-                  <span>{format(new Date(task.deadline), "MMM dd, yyyy 'at' hh:mm a")}</span>
-                </div>
-              )}
-            </div>
-
-            {task.status === "completed" && (task as any).completion_photo_url && (
-              <div className="mb-3 p-2 bg-success/10 border border-success/20 rounded-lg">
-                <p className="text-xs text-success font-medium flex items-center gap-1">
-                  <Check className="h-3 w-3" />
-                  Has completion proof photo - Click to view
-                </p>
-              </div>
-            )}
-
-            <div className="flex gap-2">
-              <Button
-                size="sm"
-                variant={task.is_active ? "outline" : "default"}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleToggleActive(task.id, task.is_active);
-                }}
-                className="flex-1"
-              >
-                {task.is_active ? (
-                  <>
-                    <PowerOff className="h-3 w-3 mr-1" />
-                    Deactivate
-                  </>
-                ) : (
-                  <>
-                    <Power className="h-3 w-3 mr-1" />
-                    Activate
-                  </>
-                )}
-              </Button>
-              <Button
-                size="sm"
-                variant="destructive"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleDeleteTask(task.id);
-                }}
-              >
-                <Trash2 className="h-3 w-3" />
-              </Button>
-            </div>
-            {isNewToday && (
-              <div className="mt-2 flex items-center gap-1 text-xs text-primary">
-                <span className="inline-block h-1.5 w-1.5 bg-primary rounded-full animate-pulse"></span>
-                New Today
-              </div>
-            )}
-          </Card>
-                  );
-                })}
+      {/* Filters Section */}
+      <Card className="p-4 mb-6">
+        <div className="flex flex-col sm:flex-row gap-3">
+          {/* Search */}
+          <div className="flex-1">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search tasks by title, description, or employee..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-10"
+              />
             </div>
           </div>
-        )}
 
-        {/* Completed Tasks */}
-        {tasks.filter(t => t.status === "completed").length > 0 && (
-          <div className="pt-6 border-t">
-            <h3 className="text-sm font-semibold mb-3 text-muted-foreground">
-              Completed Tasks ({tasks.filter(t => t.status === "completed").length})
-            </h3>
+          {/* Department Filter */}
+          <div className="w-full sm:w-64">
+            <Select value={selectedDepartment} onValueChange={setSelectedDepartment}>
+              <SelectTrigger>
+                <Building2 className="h-4 w-4 mr-2" />
+                <SelectValue placeholder="All Departments" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Departments</SelectItem>
+                {departments.map((dept) => (
+                  <SelectItem key={dept.id} value={dept.id}>
+                    {dept.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+      </Card>
+
+      {/* Tabs for Task Status */}
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+        <TabsList className="grid w-full grid-cols-5 lg:w-auto lg:inline-grid">
+          <TabsTrigger value="all" className="relative">
+            All
+            <Badge variant="secondary" className="ml-2 h-5 min-w-5 px-1">
+              {taskCounts.all}
+            </Badge>
+          </TabsTrigger>
+          <TabsTrigger value="new" className="relative">
+            New Today
+            <Badge variant="secondary" className="ml-2 h-5 min-w-5 px-1 bg-primary/20 text-primary">
+              {taskCounts.new}
+            </Badge>
+          </TabsTrigger>
+          <TabsTrigger value="pending" className="relative">
+            Pending
+            <Badge variant="secondary" className="ml-2 h-5 min-w-5 px-1 bg-warning/20 text-warning">
+              {taskCounts.pending}
+            </Badge>
+          </TabsTrigger>
+          <TabsTrigger value="in_progress" className="relative">
+            In Progress
+            <Badge variant="secondary" className="ml-2 h-5 min-w-5 px-1 bg-blue-500/20 text-blue-600">
+              {taskCounts.in_progress}
+            </Badge>
+          </TabsTrigger>
+          <TabsTrigger value="completed" className="relative">
+            Completed
+            <Badge variant="secondary" className="ml-2 h-5 min-w-5 px-1 bg-success/20 text-success">
+              {taskCounts.completed}
+            </Badge>
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value={activeTab} className="space-y-4">
+          {tasksToDisplay.length === 0 ? (
+            <Card className="p-8 text-center">
+              <p className="text-muted-foreground">
+                {searchQuery || selectedDepartment !== "all" 
+                  ? "No tasks match your filters. Try adjusting your search or filters."
+                  : `No ${activeTab === "all" ? "" : activeTab.replace("_", " ")} tasks found.`}
+              </p>
+            </Card>
+          ) : (
             <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
-              {tasks
-                .filter(t => t.status === "completed")
-                .map((task) => (
+              {tasksToDisplay.map((task) => {
+                const isNewToday = isTaskNewToday(task.created_at);
+                return (
                   <Card 
                     key={task.id} 
-                    className="p-3 sm:p-4 hover:shadow-lg transition-all animate-fade-in cursor-pointer opacity-75"
+                    className={`p-3 sm:p-4 hover:shadow-lg transition-all animate-fade-in cursor-pointer ${
+                      isNewToday ? "border-l-4 border-l-primary bg-primary/5" : ""
+                    } ${task.status === "completed" ? "opacity-75" : ""}`}
                     onClick={() => navigate(`/task/${task.id}`)}
                   >
                     <div className="flex items-start justify-between mb-3">
@@ -1011,8 +1048,8 @@ const AdminTaskAssignment = ({ adminId }: AdminTaskAssignmentProps) => {
                       )}
                       {task.department?.name && (
                         <div className="flex items-center gap-2 text-muted-foreground">
-                          <User className="h-4 w-4" />
-                          <span>Dept: {task.department.name}</span>
+                          <Building2 className="h-4 w-4" />
+                          <span>{task.department.name}</span>
                         </div>
                       )}
                       {task.location_address && (
@@ -1029,7 +1066,7 @@ const AdminTaskAssignment = ({ adminId }: AdminTaskAssignmentProps) => {
                       )}
                     </div>
 
-                    {(task as any).completion_photo_url && (
+                    {task.completion_photo_url && (
                       <div className="mb-3 p-2 bg-success/10 border border-success/20 rounded-lg">
                         <p className="text-xs text-success font-medium flex items-center gap-1">
                           <Check className="h-3 w-3" />
@@ -1071,18 +1108,20 @@ const AdminTaskAssignment = ({ adminId }: AdminTaskAssignmentProps) => {
                         <Trash2 className="h-3 w-3" />
                       </Button>
                     </div>
+                    
+                    {isNewToday && (
+                      <div className="mt-2 flex items-center gap-1 text-xs text-primary">
+                        <span className="inline-block h-1.5 w-1.5 bg-primary rounded-full animate-pulse"></span>
+                        New Today
+                      </div>
+                    )}
                   </Card>
-                ))}
+                );
+              })}
             </div>
-          </div>
-        )}
-
-        {tasks.length === 0 && (
-          <Card className="p-8 text-center">
-            <p className="text-muted-foreground">No tasks assigned yet. Create your first task to get started.</p>
-          </Card>
-        )}
-      </div>
+          )}
+        </TabsContent>
+      </Tabs>
     </div>
   );
 };
