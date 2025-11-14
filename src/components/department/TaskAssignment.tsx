@@ -126,7 +126,7 @@ const TaskAssignment = ({ departmentId, assignedBy }: TaskAssignmentProps) => {
     }
 
     // Sort tasks: pending/in_progress at top, completed at bottom
-    const sortedTasks = sortTasksByStatus(data || []);
+    const sortedTasks = sortTasksByStatus((data as unknown as Task[]) || []);
     setTasks(sortedTasks);
   };
 
