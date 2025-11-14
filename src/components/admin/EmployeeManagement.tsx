@@ -37,7 +37,11 @@ interface EmployeeTask {
   description: string | null;
   status: string;
   priority: string;
-  deadline: string | null;
+  start_date?: string | null;
+  start_time?: string | null;
+  end_date?: string | null;
+  end_time?: string | null;
+  created_at?: string;
   department: { name: string } | null;
 }
 
@@ -47,7 +51,10 @@ interface TaskDetail {
   description: string | null;
   status: string;
   priority: string;
-  deadline: string | null;
+  start_date?: string | null;
+  start_time?: string | null;
+  end_date?: string | null;
+  end_time?: string | null;
   location_address: string | null;
   location_lat: number | null;
   location_lng: number | null;
@@ -342,7 +349,11 @@ const EmployeeManagement = ({ adminId }: EmployeeManagementProps = {}) => {
           description,
           status,
           priority,
-          deadline,
+          start_date,
+          start_time,
+          end_date,
+          end_time,
+          created_at,
           department:departments(name)
         `)
         .eq("assigned_to", employeeId)
@@ -350,6 +361,7 @@ const EmployeeManagement = ({ adminId }: EmployeeManagementProps = {}) => {
         .range(from, to);
 
       if (error) {
+        console.error("Failed to fetch employee tasks:", error);
         showError("Failed to fetch employee tasks");
         return;
       }
@@ -383,12 +395,13 @@ const EmployeeManagement = ({ adminId }: EmployeeManagementProps = {}) => {
           *,
           employee:employees!tasks_assigned_to_fkey (name, email),
           assigned_by_employee:employees!tasks_assigned_by_fkey (name),
-          department:departments (name)
+          department:departments(name)
         `)
         .eq("id", taskId)
         .single();
 
       if (error) {
+        console.error("Failed to fetch task details:", error);
         showError("Failed to fetch task details");
         return;
       }
@@ -717,7 +730,7 @@ const EmployeeManagement = ({ adminId }: EmployeeManagementProps = {}) => {
       email: "",
       password: "",
       role: "employee",
-      department_id: "none",
+      department_id: "",
       phone: "",
     });
   };
@@ -1070,8 +1083,10 @@ const EmployeeManagement = ({ adminId }: EmployeeManagementProps = {}) => {
                         {task.department && (
                           <span>Department: {task.department.name}</span>
                         )}
-                        {task.deadline && (
-                          <span>Due: {new Date(task.deadline).toLocaleDateString()}</span>
+                        {task.start_date && task.end_date && (
+                          <span>
+                            {format(new Date(task.start_date), "MMM dd")} {task.start_time} - {format(new Date(task.end_date), "MMM dd")} {task.end_time}
+                          </span>
                         )}
                       </div>
                     </div>
@@ -1242,15 +1257,15 @@ const EmployeeManagement = ({ adminId }: EmployeeManagementProps = {}) => {
                   </Card>
                 )}
 
-                {/* Deadline */}
-                {selectedTask.deadline && (
+                {/* Schedule */}
+                {selectedTask.start_date && selectedTask.end_date && (
                   <Card className="p-4">
                     <div className="flex items-start gap-3">
                       <Calendar className="h-5 w-5 mt-0.5 text-primary" />
                       <div>
-                        <p className="text-sm font-semibold">Deadline</p>
+                        <p className="text-sm font-semibold">Schedule</p>
                         <p className="text-sm text-muted-foreground">
-                          {format(new Date(selectedTask.deadline), "PPP")}
+                          {format(new Date(selectedTask.start_date), "PPP")} {selectedTask.start_time} - {format(new Date(selectedTask.end_date), "PPP")} {selectedTask.end_time}
                         </p>
                       </div>
                     </div>

@@ -51,6 +51,7 @@ interface Employee {
   name: string;
   email: string;
   role: string;
+  department_id?: string | null;
   departments?: { name: string } | null;
 }
 
@@ -134,21 +135,21 @@ const TaskAssignment = ({ departmentId, assignedBy }: TaskAssignmentProps) => {
         name,
         email,
         role,
-        departments (name)
+        department_id,
+        departments:departments(name)
       `)
-      .eq("is_active", true);
+      .eq("is_active", true)
+      .in("role", ["employee", "department_head"]);
 
     // Filter by department if departmentId exists
     if (departmentId) {
-      query = query.eq("department_id", departmentId).in("role", ["employee", "department_head"]);
-    } else {
-      // For unassigned tasks, show only employees without department
-      query = query.is("department_id", null).in("role", ["employee", "department_head"]);
+      query = query.eq("department_id", departmentId);
     }
 
     const { data, error } = await query.order("name");
 
     if (error) {
+      console.error("Failed to fetch employees:", error);
       showError("Failed to fetch employees");
       return;
     }

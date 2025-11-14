@@ -221,7 +221,7 @@ const AdminTaskAssignment = ({ adminId }: AdminTaskAssignmentProps) => {
         email,
         role,
         department_id,
-        departments (name)
+        departments:departments(name)
       `)
       .eq("is_active", true)
       .order("name");
@@ -242,6 +242,7 @@ const AdminTaskAssignment = ({ adminId }: AdminTaskAssignmentProps) => {
     const { data, error } = await query;
 
     if (error) {
+      console.error("Failed to fetch department heads:", error);
       showError("Failed to fetch employees");
       return;
     }

@@ -53,8 +53,6 @@ const BulkTaskAssignment = ({ departmentId, assignedBy }: BulkTaskAssignmentProp
     // Only filter by department_id if it's not null
     if (departmentId) {
       query = query.eq("department_id", departmentId);
-    } else {
-      query = query.is("department_id", null);
     }
 
     const { data, error } = await query.order("name");
