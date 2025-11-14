@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { showSuccess, showError, showConfirm } from "@/lib/sweetalert";
-import { Plus, MapPin, Clock, User, AlertCircle, Check, ChevronsUpDown, Power, PowerOff, Trash2, Play, Paperclip, X, Repeat } from "lucide-react";
+import { Plus, MapPin, Clock, User, AlertCircle, Check, ChevronsUpDown, Power, PowerOff, Trash2, Play, Paperclip, X, Repeat, CheckCircle2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { format } from "date-fns";
 import { Calendar } from "@/components/ui/calendar";
@@ -27,14 +27,22 @@ interface Task {
   description: string | null;
   status: string;
   priority: string;
-  start_date: string | null;
-  start_time: string | null;
-  end_date: string | null;
-  end_time: string | null;
+  deadline?: string | null;
+  start_date?: string | null;
+  start_time?: string | null;
+  end_date?: string | null;
+  end_time?: string | null;
   location_address: string | null;
   assigned_to: string | null;
+  assigned_by?: string | null;
   is_active: boolean;
   created_at?: string;
+  started_at?: string | null;
+  completed_at?: string | null;
+  completion_photo_url?: string | null;
+  approved_at?: string | null;
+  approved_by?: string | null;
+  department_id?: string | null;
   employee?: { name: string };
 }
 
@@ -914,7 +922,32 @@ const TaskAssignment = ({ departmentId, assignedBy }: TaskAssignmentProps) => {
                   </span>
                 </div>
               )}
+              {task.started_at && (
+                <div className="flex items-center gap-2 text-blue-600">
+                  <Play className="h-4 w-4" />
+                  <span className="text-xs">
+                    Started: {format(new Date(task.started_at), "MMM dd, HH:mm")}
+                  </span>
+                </div>
+              )}
+              {task.completed_at && (
+                <div className="flex items-center gap-2 text-success">
+                  <CheckCircle2 className="h-4 w-4" />
+                  <span className="text-xs">
+                    Completed: {format(new Date(task.completed_at), "MMM dd, HH:mm")}
+                  </span>
+                </div>
+              )}
             </div>
+
+            {task.completion_photo_url && (
+              <div className="mb-3 p-2 bg-success/10 border border-success/20 rounded-lg">
+                <p className="text-xs text-success font-medium flex items-center gap-1">
+                  <Check className="h-3 w-3" />
+                  Has completion proof photo - Click to view
+                </p>
+              </div>
+            )}
 
             {/* Action Buttons */}
             <div className="flex flex-wrap gap-2">
@@ -1033,7 +1066,32 @@ const TaskAssignment = ({ departmentId, assignedBy }: TaskAssignmentProps) => {
                           </span>
                         </div>
                       )}
+                      {task.started_at && (
+                        <div className="flex items-center gap-2 text-blue-600">
+                          <Play className="h-4 w-4" />
+                          <span className="text-xs">
+                            Started: {format(new Date(task.started_at), "MMM dd, HH:mm")}
+                          </span>
+                        </div>
+                      )}
+                      {task.completed_at && (
+                        <div className="flex items-center gap-2 text-success">
+                          <CheckCircle2 className="h-4 w-4" />
+                          <span className="text-xs">
+                            Completed: {format(new Date(task.completed_at), "MMM dd, HH:mm")}
+                          </span>
+                        </div>
+                      )}
             </div>
+
+                    {task.completion_photo_url && (
+                      <div className="mb-3 p-2 bg-success/10 border border-success/20 rounded-lg">
+                        <p className="text-xs text-success font-medium flex items-center gap-1">
+                          <Check className="h-3 w-3" />
+                          Has completion proof photo - Click to view
+                        </p>
+                      </div>
+                    )}
           </Card>
         ))}
             </div>
