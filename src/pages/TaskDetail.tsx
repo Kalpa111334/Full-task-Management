@@ -317,18 +317,79 @@ const TaskDetail = () => {
                         src={task.completion_photo_url}
                         alt="Task completion proof"
                         className="rounded-lg w-full h-auto object-contain border-2 border-success/20 cursor-pointer hover:border-success/40 transition-all"
-                        onClick={() => {
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          // Remove any existing modal and always restore scroll
+                          const existingModal = document.getElementById('fullscreen-task-photo-modal');
+                          if (existingModal) {
+                            existingModal.remove();
+                            document.body.style.overflow = '';
+                          }
                           const modal = document.createElement('div');
-                          modal.className = 'fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4';
-                          modal.onclick = () => modal.remove();
+                          modal.id = 'fullscreen-task-photo-modal';
+                          modal.style.cssText = `
+                            position: fixed;
+                            top: 0;
+                            left: 0;
+                            right: 0;
+                            bottom: 0;
+                            width: 100vw;
+                            height: 100vh;
+                            background-color: rgba(0, 0, 0, 0.95);
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                            z-index: 9999;
+                            padding: 1rem;
+                            cursor: zoom-out;
+                          `;
                           const img = document.createElement('img');
                           img.src = task.completion_photo_url!;
-                          img.className = 'max-w-full max-h-full object-contain';
+                          img.style.cssText = `
+                            max-width: 100%;
+                            max-height: 100%;
+                            width: auto;
+                            height: auto;
+                            object-fit: contain;
+                            border-radius: 0.5rem;
+                          `;
+                          const closeText = document.createElement('div');
+                          closeText.textContent = 'Click anywhere to close';
+                          closeText.style.cssText = `
+                            position: absolute;
+                            top: 1rem;
+                            right: 1rem;
+                            color: white;
+                            background-color: rgba(0, 0, 0, 0.7);
+                            padding: 0.5rem 1rem;
+                            border-radius: 0.5rem;
+                            font-size: 0.875rem;
+                            pointer-events: none;
+                          `;
+                          // Always restore scroll on close
+                          const closeModal = (e) => {
+                            e.stopPropagation();
+                            if (modal.parentNode) {
+                              modal.parentNode.removeChild(modal);
+                            }
+                            document.body.style.overflow = '';
+                          };
+                          modal.onclick = closeModal;
+                          // Also restore scroll if user presses Escape
+                          const escListener = (event) => {
+                            if (event.key === 'Escape') {
+                              closeModal(event);
+                              window.removeEventListener('keydown', escListener);
+                            }
+                          };
+                          window.addEventListener('keydown', escListener);
                           modal.appendChild(img);
+                          modal.appendChild(closeText);
+                          document.body.style.overflow = 'hidden';
                           document.body.appendChild(modal);
                         }}
                       />
-                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 rounded-lg transition-all flex items-center justify-center opacity-0 group-hover:opacity-100">
+                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 rounded-lg transition-all flex items-center justify-center opacity-0 group-hover:opacity-100 pointer-events-none">
                         <p className="text-white text-sm font-medium bg-black/50 px-3 py-1 rounded">
                           Click to view full size
                         </p>
