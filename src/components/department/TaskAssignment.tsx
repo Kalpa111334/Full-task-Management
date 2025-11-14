@@ -96,7 +96,19 @@ const TaskAssignment = ({ departmentId, assignedBy }: TaskAssignmentProps) => {
     let query = supabase
       .from("tasks")
       .select(`
-        *,
+        id,
+        title,
+        description,
+        status,
+        priority,
+        start_date,
+        start_time,
+        end_date,
+        end_time,
+        location_address,
+        assigned_to,
+        is_active,
+        created_at,
         employee:employees!tasks_assigned_to_fkey (name)
       `);
     
