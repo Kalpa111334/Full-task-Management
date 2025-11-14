@@ -28,7 +28,10 @@ interface Task {
   description: string | null;
   status: string;
   priority: string;
-  deadline: string | null;
+  start_date: string | null;
+  start_time: string | null;
+  end_date: string | null;
+  end_time: string | null;
   location_address: string | null;
   assigned_to: string | null;
   is_active: boolean;
@@ -80,8 +83,9 @@ const AdminTaskAssignment = ({ adminId }: AdminTaskAssignmentProps) => {
     priority: "medium",
     task_type: "normal",
     location_address: "",
-    deadline: undefined as Date | undefined,
+    start_date: new Date() as Date,
     start_time: "09:00" as string,
+    end_date: new Date() as Date,
     end_time: "17:00" as string,
     is_required: false,
     attachment: null as File | null,
@@ -392,8 +396,9 @@ const AdminTaskAssignment = ({ adminId }: AdminTaskAssignmentProps) => {
       priority: formData.priority as "low" | "medium" | "high" | "urgent",
       task_type: formData.task_type,
       location_address: formData.location_address || null,
-      deadline: formData.deadline?.toISOString() || null,
+      start_date: formData.start_date?.toISOString() || null,
       start_time: formData.start_time,
+      end_date: formData.end_date?.toISOString() || null,
       end_time: formData.end_time,
       status: "pending",
       is_recurring: formData.is_recurring || false,
@@ -430,8 +435,17 @@ const AdminTaskAssignment = ({ adminId }: AdminTaskAssignmentProps) => {
           const taskId = retryTask[0]?.id;
           // Send push notification
           await notifyTaskAssigned(formData.title, formData.assigned_to, adminName);
-          // Send WhatsApp notification
-          await notifyDeptHeadTaskAssigned(formData.title, formData.assigned_to, adminName, taskId);
+          // Send WhatsApp notification with start and end dates/times
+          await notifyDeptHeadTaskAssigned(
+            formData.title, 
+            formData.assigned_to, 
+            adminName, 
+            taskId,
+            formData.start_time,
+            formData.end_time,
+            formData.start_date ? format(formData.start_date, "MMM dd, yyyy") : undefined,
+            formData.end_date ? format(formData.end_date, "MMM dd, yyyy") : undefined
+          );
         }
         setIsDialogOpen(false);
         resetForm();
@@ -465,14 +479,16 @@ const AdminTaskAssignment = ({ adminId }: AdminTaskAssignmentProps) => {
       const taskId = newTask[0]?.id;
       // Send push notification
       await notifyTaskAssigned(formData.title, formData.assigned_to, adminName);
-      // Send WhatsApp notification with start and end times
+      // Send WhatsApp notification with start and end dates/times
       await notifyDeptHeadTaskAssigned(
         formData.title, 
         formData.assigned_to, 
         adminName, 
         taskId,
         formData.start_time,
-        formData.end_time
+        formData.end_time,
+        formData.start_date ? format(formData.start_date, "MMM dd, yyyy") : undefined,
+        formData.end_date ? format(formData.end_date, "MMM dd, yyyy") : undefined
       );
     }
 
@@ -490,8 +506,9 @@ const AdminTaskAssignment = ({ adminId }: AdminTaskAssignmentProps) => {
       priority: "medium",
       task_type: "normal",
       location_address: "",
-      deadline: undefined,
+      start_date: new Date(),
       start_time: "09:00",
+      end_date: new Date(),
       end_time: "17:00",
       is_required: false,
       attachment: null,
@@ -721,60 +738,91 @@ const AdminTaskAssignment = ({ adminId }: AdminTaskAssignmentProps) => {
                   />
                 </div>
 
-                <div className="space-y-2">
-                  <Label>Deadline</Label>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant="outline"
-                        className={cn(
-                          "w-full justify-start text-left font-normal",
-                          !formData.deadline && "text-muted-foreground"
-                        )}
-                      >
-                        <CalendarIcon className="mr-2 h-4 w-4" />
-                        {formData.deadline ? format(formData.deadline, "PPP") : "Pick a date"}
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0" align="start">
-                      <Calendar
-                        mode="single"
-                        selected={formData.deadline}
-                        onSelect={(date) => setFormData({ ...formData, deadline: date })}
-                        initialFocus
-                        className="pointer-events-auto"
-                      />
-                    </PopoverContent>
-                  </Popover>
-                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Start Date *</Label>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline"
+                          className={cn(
+                            "w-full justify-start text-left font-normal",
+                            !formData.start_date && "text-muted-foreground"
+                          )}
+                        >
+                          <CalendarIcon className="mr-2 h-4 w-4" />
+                          {formData.start_date ? format(formData.start_date, "PPP") : "Pick start date"}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <Calendar
+                          mode="single"
+                          selected={formData.start_date}
+                          onSelect={(date) => setFormData({ ...formData, start_date: date })}
+                          initialFocus
+                          className="pointer-events-auto"
+                        />
+                      </PopoverContent>
+                    </Popover>
+                  </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="start_time">Task Start Time *</Label>
-                  <div className="flex items-center gap-2">
-                    <Clock className="h-4 w-4 text-muted-foreground" />
-                    <Input
-                      id="start_time"
-                      type="time"
-                      value={formData.start_time}
-                      onChange={(e) => setFormData({ ...formData, start_time: e.target.value })}
-                      className="flex-1"
-                      required
-                    />
+                  <div className="space-y-2">
+                    <Label htmlFor="start_time">Start Time *</Label>
+                    <div className="flex items-center gap-2">
+                      <Clock className="h-4 w-4 text-muted-foreground" />
+                      <Input
+                        id="start_time"
+                        type="time"
+                        value={formData.start_time}
+                        onChange={(e) => setFormData({ ...formData, start_time: e.target.value })}
+                        className="flex-1"
+                        required
+                      />
+                    </div>
                   </div>
                 </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="end_time">Task End Time *</Label>
-                  <div className="flex items-center gap-2">
-                    <Clock className="h-4 w-4 text-muted-foreground" />
-                    <Input
-                      id="end_time"
-                      type="time"
-                      value={formData.end_time}
-                      onChange={(e) => setFormData({ ...formData, end_time: e.target.value })}
-                      className="flex-1"
-                      required
-                    />
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>End Date *</Label>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline"
+                          className={cn(
+                            "w-full justify-start text-left font-normal",
+                            !formData.end_date && "text-muted-foreground"
+                          )}
+                        >
+                          <CalendarIcon className="mr-2 h-4 w-4" />
+                          {formData.end_date ? format(formData.end_date, "PPP") : "Pick end date"}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <Calendar
+                          mode="single"
+                          selected={formData.end_date}
+                          onSelect={(date) => setFormData({ ...formData, end_date: date })}
+                          initialFocus
+                          className="pointer-events-auto"
+                        />
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="end_time">End Time *</Label>
+                    <div className="flex items-center gap-2">
+                      <Clock className="h-4 w-4 text-muted-foreground" />
+                      <Input
+                        id="end_time"
+                        type="time"
+                        value={formData.end_time}
+                        onChange={(e) => setFormData({ ...formData, end_time: e.target.value })}
+                        className="flex-1"
+                        required
+                      />
+                    </div>
                   </div>
                 </div>
               </div>
@@ -984,34 +1032,34 @@ const AdminTaskAssignment = ({ adminId }: AdminTaskAssignmentProps) => {
 
       {/* Tabs for Task Status */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <TabsList className="grid w-full grid-cols-5 lg:w-auto lg:inline-grid">
-          <TabsTrigger value="all" className="relative">
-            All
-            <Badge variant="secondary" className="ml-2 h-5 min-w-5 px-1">
+        <TabsList className="grid w-full grid-cols-2 gap-2 h-auto sm:grid-cols-3 md:grid-cols-5 lg:w-auto lg:inline-grid lg:h-10">
+          <TabsTrigger value="all" className="relative text-xs sm:text-sm flex-col sm:flex-row gap-1 sm:gap-0 h-auto sm:h-10 py-2 sm:py-0">
+            <span>All</span>
+            <Badge variant="secondary" className="sm:ml-2 h-4 sm:h-5 min-w-4 sm:min-w-5 px-1 text-[10px] sm:text-xs">
               {taskCounts.all}
             </Badge>
           </TabsTrigger>
-          <TabsTrigger value="new" className="relative">
-            New Today
-            <Badge variant="secondary" className="ml-2 h-5 min-w-5 px-1 bg-primary/20 text-primary">
+          <TabsTrigger value="new" className="relative text-xs sm:text-sm flex-col sm:flex-row gap-1 sm:gap-0 h-auto sm:h-10 py-2 sm:py-0">
+            <span className="whitespace-nowrap">New</span>
+            <Badge variant="secondary" className="sm:ml-2 h-4 sm:h-5 min-w-4 sm:min-w-5 px-1 text-[10px] sm:text-xs bg-primary/20 text-primary">
               {taskCounts.new}
             </Badge>
           </TabsTrigger>
-          <TabsTrigger value="pending" className="relative">
-            Pending
-            <Badge variant="secondary" className="ml-2 h-5 min-w-5 px-1 bg-warning/20 text-warning">
+          <TabsTrigger value="pending" className="relative text-xs sm:text-sm flex-col sm:flex-row gap-1 sm:gap-0 h-auto sm:h-10 py-2 sm:py-0">
+            <span>Pending</span>
+            <Badge variant="secondary" className="sm:ml-2 h-4 sm:h-5 min-w-4 sm:min-w-5 px-1 text-[10px] sm:text-xs bg-warning/20 text-warning">
               {taskCounts.pending}
             </Badge>
           </TabsTrigger>
-          <TabsTrigger value="in_progress" className="relative">
-            In Progress
-            <Badge variant="secondary" className="ml-2 h-5 min-w-5 px-1 bg-blue-500/20 text-blue-600">
+          <TabsTrigger value="in_progress" className="relative text-xs sm:text-sm flex-col sm:flex-row gap-1 sm:gap-0 h-auto sm:h-10 py-2 sm:py-0">
+            <span className="whitespace-nowrap">Progress</span>
+            <Badge variant="secondary" className="sm:ml-2 h-4 sm:h-5 min-w-4 sm:min-w-5 px-1 text-[10px] sm:text-xs bg-blue-500/20 text-blue-600">
               {taskCounts.in_progress}
             </Badge>
           </TabsTrigger>
-          <TabsTrigger value="completed" className="relative">
-            Completed
-            <Badge variant="secondary" className="ml-2 h-5 min-w-5 px-1 bg-success/20 text-success">
+          <TabsTrigger value="completed" className="relative text-xs sm:text-sm flex-col sm:flex-row gap-1 sm:gap-0 h-auto sm:h-10 py-2 sm:py-0 col-span-2 sm:col-span-1">
+            <span>Done</span>
+            <Badge variant="secondary" className="sm:ml-2 h-4 sm:h-5 min-w-4 sm:min-w-5 px-1 text-[10px] sm:text-xs bg-success/20 text-success">
               {taskCounts.completed}
             </Badge>
           </TabsTrigger>
@@ -1078,10 +1126,12 @@ const AdminTaskAssignment = ({ adminId }: AdminTaskAssignmentProps) => {
                           <span className="truncate">{task.location_address}</span>
                         </div>
                       )}
-                      {task.deadline && (
+                      {task.start_date && task.end_date && (
                         <div className="flex items-center gap-2 text-muted-foreground">
                           <Clock className="h-4 w-4" />
-                          <span>{format(new Date(task.deadline), "MMM dd, yyyy 'at' hh:mm a")}</span>
+                          <span>
+                            {format(new Date(task.start_date), "MMM dd")} {task.start_time} - {format(new Date(task.end_date), "MMM dd")} {task.end_time}
+                          </span>
                         </div>
                       )}
                     </div>

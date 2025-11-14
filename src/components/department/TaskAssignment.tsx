@@ -27,7 +27,10 @@ interface Task {
   description: string | null;
   status: string;
   priority: string;
-  deadline: string | null;
+  start_date: string | null;
+  start_time: string | null;
+  end_date: string | null;
+  end_time: string | null;
   location_address: string | null;
   assigned_to: string | null;
   is_active: boolean;
@@ -61,8 +64,9 @@ const TaskAssignment = ({ departmentId, assignedBy }: TaskAssignmentProps) => {
     priority: "medium",
     task_type: "normal",
     location_address: "",
-    deadline: undefined as Date | undefined,
+    start_date: new Date() as Date,
     start_time: "09:00" as string,
+    end_date: new Date() as Date,
     end_time: "17:00" as string,
     attachment: null as File | null,
     is_recurring: false,
@@ -353,8 +357,9 @@ const TaskAssignment = ({ departmentId, assignedBy }: TaskAssignmentProps) => {
         priority: formData.priority as "low" | "medium" | "high" | "urgent",
         task_type: formData.task_type,
         location_address: formData.location_address || null,
-          deadline: formData.deadline ? formData.deadline.toISOString() : null,
+        start_date: formData.start_date ? formData.start_date.toISOString() : null,
         start_time: formData.start_time,
+        end_date: formData.end_date ? formData.end_date.toISOString() : null,
         end_time: formData.end_time,
         status: "pending",
         is_recurring: formData.is_recurring || false,
@@ -390,16 +395,18 @@ const TaskAssignment = ({ departmentId, assignedBy }: TaskAssignmentProps) => {
       const taskId = newTask[0]?.id;
       // Send push notification
       await notifyTaskAssigned(formData.title, formData.assigned_to, assignerName);
-      // Send WhatsApp notification with start and end times
+      // Send WhatsApp notification with start and end dates/times
       await notifyEmployeeTaskAssigned(
         formData.title, 
         formData.assigned_to, 
         assignerName,
-        formData.deadline?.toISOString(),
+        null, // No longer using deadline field
         formData.priority,
         taskId,
         formData.start_time,
-        formData.end_time
+        formData.end_time,
+        formData.start_date ? format(formData.start_date, "MMM dd, yyyy") : undefined,
+        formData.end_date ? format(formData.end_date, "MMM dd, yyyy") : undefined
       );
     }
     
@@ -416,8 +423,9 @@ const TaskAssignment = ({ departmentId, assignedBy }: TaskAssignmentProps) => {
       priority: "medium",
       task_type: "normal",
       location_address: "",
-      deadline: undefined,
+      start_date: new Date(),
       start_time: "09:00",
+      end_date: new Date(),
       end_time: "17:00",
       attachment: null,
       is_recurring: false,
@@ -598,61 +606,91 @@ const TaskAssignment = ({ departmentId, assignedBy }: TaskAssignmentProps) => {
                   />
                 </div>
 
-                <div className="space-y-2">
-                  <Label>Deadline</Label>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant="outline"
-                        className={cn(
-                          "w-full justify-start text-left font-normal",
-                          !formData.deadline && "text-muted-foreground"
-                        )}
-                      >
-                        <CalendarIcon className="mr-2 h-4 w-4" />
-                        {formData.deadline ? format(formData.deadline, "PPP") : "Pick a date"}
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0" align="start">
-                      <Calendar
-                        mode="single"
-                        selected={formData.deadline}
-                        onSelect={(date) => setFormData({ ...formData, deadline: date })}
-                        initialFocus
-                        className="pointer-events-auto"
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Start Date *</Label>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline"
+                          className={cn(
+                            "w-full justify-start text-left font-normal",
+                            !formData.start_date && "text-muted-foreground"
+                          )}
+                        >
+                          <CalendarIcon className="mr-2 h-4 w-4" />
+                          {formData.start_date ? format(formData.start_date, "PPP") : "Pick start date"}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <Calendar
+                          mode="single"
+                          selected={formData.start_date}
+                          onSelect={(date) => setFormData({ ...formData, start_date: date })}
+                          initialFocus
+                          className="pointer-events-auto"
+                        />
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="start_time">Start Time *</Label>
+                    <div className="flex items-center gap-2">
+                      <Clock className="h-4 w-4 text-muted-foreground" />
+                      <Input
+                        id="start_time"
+                        type="time"
+                        value={formData.start_time}
+                        onChange={(e) => setFormData({ ...formData, start_time: e.target.value })}
+                        className="flex-1"
+                        required
                       />
-                    </PopoverContent>
-                  </Popover>
-                </div>
-
-
-                <div className="space-y-2">
-                  <Label htmlFor="start_time">Task Start Time *</Label>
-                  <div className="flex items-center gap-2">
-                    <Clock className="h-4 w-4 text-muted-foreground" />
-                    <Input
-                      id="start_time"
-                      type="time"
-                      value={formData.start_time}
-                      onChange={(e) => setFormData({ ...formData, start_time: e.target.value })}
-                      className="flex-1"
-                      required
-                    />
+                    </div>
                   </div>
                 </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="end_time">Task End Time *</Label>
-                  <div className="flex items-center gap-2">
-                    <Clock className="h-4 w-4 text-muted-foreground" />
-                    <Input
-                      id="end_time"
-                      type="time"
-                      value={formData.end_time}
-                      onChange={(e) => setFormData({ ...formData, end_time: e.target.value })}
-                      className="flex-1"
-                      required
-                    />
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>End Date *</Label>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline"
+                          className={cn(
+                            "w-full justify-start text-left font-normal",
+                            !formData.end_date && "text-muted-foreground"
+                          )}
+                        >
+                          <CalendarIcon className="mr-2 h-4 w-4" />
+                          {formData.end_date ? format(formData.end_date, "PPP") : "Pick end date"}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <Calendar
+                          mode="single"
+                          selected={formData.end_date}
+                          onSelect={(date) => setFormData({ ...formData, end_date: date })}
+                          initialFocus
+                          className="pointer-events-auto"
+                        />
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="end_time">End Time *</Label>
+                    <div className="flex items-center gap-2">
+                      <Clock className="h-4 w-4 text-muted-foreground" />
+                      <Input
+                        id="end_time"
+                        type="time"
+                        value={formData.end_time}
+                        onChange={(e) => setFormData({ ...formData, end_time: e.target.value })}
+                        className="flex-1"
+                        required
+                      />
+                    </div>
                   </div>
                 </div>
               </div>
@@ -868,10 +906,12 @@ const TaskAssignment = ({ departmentId, assignedBy }: TaskAssignmentProps) => {
                   <span className="truncate">{task.location_address}</span>
                 </div>
               )}
-              {task.deadline && (
+              {task.start_date && task.end_date && (
                 <div className="flex items-center gap-2 text-muted-foreground">
                   <Clock className="h-4 w-4" />
-                  <span>{format(new Date(task.deadline), "PPP 'at' hh:mm a")}</span>
+                  <span>
+                    {format(new Date(task.start_date), "MMM dd")} {task.start_time} - {format(new Date(task.end_date), "MMM dd")} {task.end_time}
+                  </span>
                 </div>
               )}
             </div>
@@ -985,10 +1025,12 @@ const TaskAssignment = ({ departmentId, assignedBy }: TaskAssignmentProps) => {
                           <span className="truncate">{task.location_address}</span>
                         </div>
                       )}
-                      {task.deadline && (
+                      {task.start_date && task.end_date && (
                         <div className="flex items-center gap-2 text-muted-foreground">
                           <Clock className="h-4 w-4" />
-                          <span>{format(new Date(task.deadline), "PPP 'at' hh:mm a")}</span>
+                          <span>
+                            {format(new Date(task.start_date), "MMM dd")} {task.start_time} - {format(new Date(task.end_date), "MMM dd")} {task.end_time}
+                          </span>
                         </div>
                       )}
             </div>

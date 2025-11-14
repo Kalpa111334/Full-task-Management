@@ -17,7 +17,10 @@ interface Task {
   description: string | null;
   status: string;
   priority: string;
-  deadline: string | null;
+  start_date: string | null;
+  start_time: string | null;
+  end_date: string | null;
+  end_time: string | null;
   location_address: string | null;
   created_at: string;
   is_active: boolean;
@@ -315,10 +318,12 @@ const EmployeeTaskList = ({ employeeId }: EmployeeTaskListProps) => {
                       <span className="truncate">{task.location_address}</span>
                     </div>
                   )}
-                  {task.deadline && (
+                  {task.start_date && task.end_date && (
                     <div className="flex items-center gap-2 text-xs sm:text-sm text-muted-foreground">
                       <Clock className="h-3 w-3 sm:h-4 sm:w-4 flex-shrink-0" />
-                      <span>Due: {format(new Date(task.deadline), "PP")}</span>
+                      <span className="font-medium">
+                        {format(new Date(task.start_date), "MMM dd")} {task.start_time} - {format(new Date(task.end_date), "MMM dd")} {task.end_time}
+                      </span>
                     </div>
                   )}
                 </div>
@@ -402,10 +407,12 @@ const EmployeeTaskList = ({ employeeId }: EmployeeTaskListProps) => {
                   <span className="truncate">{task.location_address}</span>
                 </div>
               )}
-              {task.deadline && (
-                <div className="flex items-center gap-2 text-xs sm:text-sm text-muted-foreground">
+              {task.start_date && task.end_date && (
+                <div className="flex items-center gap-2 text-xs sm:text-sm text-success">
                   <Clock className="h-3 w-3 sm:h-4 sm:w-4 flex-shrink-0" />
-                  <span>Due: {format(new Date(task.deadline), "PP")}</span>
+                  <span className="font-medium">
+                    {format(new Date(task.start_date), "MMM dd")} {task.start_time} - {format(new Date(task.end_date), "MMM dd")} {task.end_time}
+                  </span>
                 </div>
               )}
             </div>

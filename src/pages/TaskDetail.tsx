@@ -17,6 +17,10 @@ interface Task {
   status: string;
   priority: string;
   deadline: string | null;
+  start_date: string | null;
+  start_time: string | null;
+  end_date: string | null;
+  end_time: string | null;
   location_address: string | null;
   location_lat: number | null;
   location_lng: number | null;
@@ -270,22 +274,24 @@ const TaskDetail = () => {
                   </div>
                 )}
 
-                {task.deadline && (
+                {task.start_date && task.end_date && (
                   <div className="flex items-center gap-3">
                     <Clock className="h-5 w-5 text-muted-foreground" />
                     <div>
-                      <p className="text-sm text-muted-foreground">Deadline</p>
-                      <p className="font-medium">{format(new Date(task.deadline), "PPpp")}</p>
+                      <p className="text-sm text-muted-foreground">Task Schedule</p>
+                      <p className="font-medium">
+                        {format(new Date(task.start_date), "MMM dd, yyyy")} {task.start_time} - {format(new Date(task.end_date), "MMM dd, yyyy")} {task.end_time}
+                      </p>
                     </div>
                   </div>
                 )}
 
                 {task.started_at && (
                   <div className="flex items-center gap-3">
-                    <Play className="h-5 w-5 text-muted-foreground" />
+                    <Play className="h-5 w-5 text-blue-500" />
                     <div>
                       <p className="text-sm text-muted-foreground">Started At</p>
-                      <p className="font-medium">{format(new Date(task.started_at), "PPpp")}</p>
+                      <p className="font-medium text-blue-600">{format(new Date(task.started_at), "PPpp")}</p>
                     </div>
                   </div>
                 )}
@@ -295,7 +301,7 @@ const TaskDetail = () => {
                     <CheckCircle2 className="h-5 w-5 text-success" />
                     <div>
                       <p className="text-sm text-muted-foreground">Completed At</p>
-                      <p className="font-medium">{format(new Date(task.completed_at), "PPpp")}</p>
+                      <p className="font-medium text-success">{format(new Date(task.completed_at), "PPpp")}</p>
                     </div>
                   </div>
                 )}
@@ -311,7 +317,16 @@ const TaskDetail = () => {
                         src={task.completion_photo_url}
                         alt="Task completion proof"
                         className="rounded-lg w-full h-auto object-contain border-2 border-success/20 cursor-pointer hover:border-success/40 transition-all"
-                        onClick={() => window.open(task.completion_photo_url!, '_blank')}
+                        onClick={() => {
+                          const modal = document.createElement('div');
+                          modal.className = 'fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4';
+                          modal.onclick = () => modal.remove();
+                          const img = document.createElement('img');
+                          img.src = task.completion_photo_url!;
+                          img.className = 'max-w-full max-h-full object-contain';
+                          modal.appendChild(img);
+                          document.body.appendChild(modal);
+                        }}
                       />
                       <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 rounded-lg transition-all flex items-center justify-center opacity-0 group-hover:opacity-100">
                         <p className="text-white text-sm font-medium bg-black/50 px-3 py-1 rounded">
