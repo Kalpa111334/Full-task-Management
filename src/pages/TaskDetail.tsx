@@ -17,10 +17,10 @@ interface Task {
   status: string;
   priority: string;
   deadline: string | null;
-  start_date: string | null;
-  start_time: string | null;
-  end_date: string | null;
-  end_time: string | null;
+  start_date?: string | null;
+  start_time?: string | null;
+  end_date?: string | null;
+  end_time?: string | null;
   location_address: string | null;
   location_lat: number | null;
   location_lng: number | null;
