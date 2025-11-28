@@ -4,13 +4,12 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { showSuccess, showError } from "@/lib/sweetalert";
-import { ClipboardList, LogOut, Map, Users, Plus, CheckCircle, FileText } from "lucide-react";
+import { ClipboardList, LogOut, Map, Users, Plus, CheckCircle } from "lucide-react";
 import TaskAssignment from "@/components/department/TaskAssignment";
 import DepartmentStats from "@/components/department/DepartmentStats";
 import MapView from "@/components/map/MapView";
 import SelfLocationPublisher from "@/components/map/SelfLocationPublisher";
 import TaskApproval from "@/components/department/TaskApproval";
-import TaskReport from "@/components/department/TaskReport";
 import BulkTaskAssignment from "@/components/department/BulkTaskAssignment";
 import DepartmentSelector from "@/components/department/DepartmentSelector";
 import DepartmentHeadAdminTasks from "@/components/department/DepartmentHeadAdminTasks";
@@ -18,7 +17,7 @@ import { PushNotificationToggle } from "@/components/PushNotificationToggle";
 
 const DepartmentHead = () => {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState<"tasks" | "admin-tasks" | "approvals" | "reports" | "map" | "team">("tasks");
+  const [activeTab, setActiveTab] = useState<"tasks" | "admin-tasks" | "approvals" | "map" | "team">("tasks");
   const [employee, setEmployee] = useState<any>(null);
 
   useEffect(() => {
@@ -182,16 +181,6 @@ const DepartmentHead = () => {
             <span className="sm:hidden">Approve</span>
           </Button>
           <Button
-            variant={activeTab === "reports" ? "default" : "outline"}
-            onClick={() => setActiveTab("reports")}
-            className={`${activeTab === "reports" ? "bg-gradient-primary" : ""} whitespace-nowrap flex-shrink-0`}
-            size="sm"
-          >
-            <FileText className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-2" />
-            <span className="hidden sm:inline">Reports</span>
-            <span className="sm:hidden">Reports</span>
-          </Button>
-          <Button
             variant={activeTab === "map" ? "default" : "outline"}
             onClick={() => setActiveTab("map")}
             className={`${activeTab === "map" ? "bg-gradient-primary" : ""} whitespace-nowrap flex-shrink-0`}
@@ -217,7 +206,6 @@ const DepartmentHead = () => {
         {activeTab === "tasks" && <TaskAssignment departmentId={employee.department_id} assignedBy={employee.id} />}
         {activeTab === "admin-tasks" && <DepartmentHeadAdminTasks departmentHeadId={employee.id} />}
         {activeTab === "approvals" && <TaskApproval departmentId={employee.department_id} approvedBy={employee.id} />}
-        {activeTab === "reports" && <TaskReport departmentId={employee?.department_id} />}
         {activeTab === "map" && <MapView departmentId={employee.department_id} />}
         {activeTab === "team" && <DepartmentSelector departmentHeadId={employee.id} departmentHeadDeptId={employee.department_id} />}
       </div>

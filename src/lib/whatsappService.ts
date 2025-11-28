@@ -668,3 +668,134 @@ export const notifyDepartmentHeadRegistered = async (
   console.log('📱 WhatsApp notification result:', result ? '✅ Sent' : '❌ Failed');
   return result;
 };
+
+/**
+ * Notification: Checklist assigned to Department Head by Admin
+ */
+export const notifyDeptHeadChecklistAssigned = async (
+  checklistTitle: string,
+  deptHeadId: string,
+  checklistId: string,
+  checklistUrl: string
+): Promise<boolean> => {
+  console.log('📨 Starting WhatsApp notification for checklist assignment:', deptHeadId);
+  
+  const phone = await getEmployeePhone(deptHeadId);
+  if (!phone) {
+    console.warn('⚠️ No phone number found for department head:', deptHeadId);
+    return false;
+  }
+
+  console.log('✅ Phone found, sending WhatsApp to:', phone);
+
+  let message = `📋 *New Digital Checklist Assigned*\n\n` +
+    `Hello! You have been assigned a new digital checklist.\n\n` +
+    `📝 *Checklist:* ${checklistTitle}\n\n` +
+    `🔗 *Click here to view the checklist:*\n${checklistUrl}\n\n` +
+    `Please click the link above to access the checklist. You can then assign it to employees in your department.\n\n` +
+    `_Task Management System_`;
+
+  const result = await sendWhatsAppMessage({
+    number: phone,
+    type: 'text',
+    message,
+  });
+
+  console.log('📱 WhatsApp notification result:', result ? '✅ Sent' : '❌ Failed');
+  return result;
+};
+
+/**
+ * Notification: Checklist assigned to Employee by Department Head
+ */
+export const notifyEmployeeChecklistAssigned = async (
+  checklistTitle: string,
+  employeeId: string,
+  checklistId: string,
+  checklistUrl: string
+): Promise<boolean> => {
+  console.log('📨 Starting WhatsApp notification for employee checklist assignment:', employeeId);
+  
+  const phone = await getEmployeePhone(employeeId);
+  if (!phone) {
+    console.warn('⚠️ No phone number found for employee:', employeeId);
+    return false;
+  }
+
+  console.log('✅ Phone found, sending WhatsApp to:', phone);
+
+  let message = `✅ *Checklist Assigned*\n\n` +
+    `Hello! You have been assigned a digital checklist.\n\n` +
+    `📝 *Checklist:* ${checklistTitle}\n\n` +
+    `🔗 *Click here to view and complete the checklist:*\n${checklistUrl}\n\n` +
+    `Please click the link above to access the checklist and start completing the tasks.\n\n` +
+    `_Task Management System_`;
+
+  const result = await sendWhatsAppMessage({
+    number: phone,
+    type: 'text',
+    message,
+  });
+
+  console.log('📱 WhatsApp notification result:', result ? '✅ Sent' : '❌ Failed');
+  return result;
+};
+
+/**
+ * Notification: Checklist item completed - notify department head and admin
+ */
+export const notifyChecklistItemCompleted = async (
+  checklistTitle: string,
+  itemTitle: string,
+  employeeId: string,
+  deptHeadId: string | null,
+  adminId: string | null,
+  checklistId: string,
+  checklistUrl: string
+): Promise<void> => {
+  // Fetch employee name
+  let employeeName = "Employee";
+  try {
+    const { data: employee } = await supabase
+      .from("employees")
+      .select("name")
+      .eq("id", employeeId)
+      .single();
+    if (employee) {
+      employeeName = employee.name;
+    }
+  } catch (error) {
+    console.error("Error fetching employee name:", error);
+  }
+
+  const message = `✅ *Checklist Item Completed*\n\n` +
+    `*${employeeName}* has completed an item in the checklist.\n\n` +
+    `📝 *Checklist:* ${checklistTitle}\n` +
+    `✓ *Completed Item:* ${itemTitle}\n\n` +
+    `🔗 *View Checklist:*\n${checklistUrl}\n\n` +
+    `_Task Management System_`;
+
+  // Notify department head
+  if (deptHeadId) {
+    const deptHeadPhone = await getEmployeePhone(deptHeadId);
+    if (deptHeadPhone) {
+      await sendWhatsAppMessage({
+        number: deptHeadPhone,
+        type: 'text',
+        message,
+      });
+    }
+  }
+
+  // Notify admin
+  if (adminId) {
+    const adminPhone = await getEmployeePhone(adminId);
+    if (adminPhone) {
+      await sendWhatsAppMessage({
+        number: adminPhone,
+        type: 'text',
+        message,
+      });
+    }
+  }
+};
