@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { showSuccess, showError } from "@/lib/sweetalert";
-import { ClipboardList, LogOut, Map, Users, Plus, CheckCircle } from "lucide-react";
+import { ClipboardList, LogOut, Map, Users, Plus, CheckCircle, ListChecks } from "lucide-react";
 import TaskAssignment from "@/components/department/TaskAssignment";
 import DepartmentStats from "@/components/department/DepartmentStats";
 import MapView from "@/components/map/MapView";
@@ -13,11 +13,12 @@ import TaskApproval from "@/components/department/TaskApproval";
 import BulkTaskAssignment from "@/components/department/BulkTaskAssignment";
 import DepartmentSelector from "@/components/department/DepartmentSelector";
 import DepartmentHeadAdminTasks from "@/components/department/DepartmentHeadAdminTasks";
+import ChecklistManagement from "@/components/department/ChecklistManagement";
 import { PushNotificationToggle } from "@/components/PushNotificationToggle";
 
 const DepartmentHead = () => {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState<"tasks" | "admin-tasks" | "approvals" | "map" | "team">("tasks");
+  const [activeTab, setActiveTab] = useState<"tasks" | "admin-tasks" | "approvals" | "map" | "team" | "checklists">("tasks");
   const [employee, setEmployee] = useState<any>(null);
 
   useEffect(() => {
@@ -200,6 +201,16 @@ const DepartmentHead = () => {
             <span className="hidden sm:inline">Team Overview</span>
             <span className="sm:hidden">Team</span>
           </Button>
+          <Button
+            variant={activeTab === "checklists" ? "default" : "outline"}
+            onClick={() => setActiveTab("checklists")}
+            className={`${activeTab === "checklists" ? "bg-gradient-primary" : ""} whitespace-nowrap flex-shrink-0`}
+            size="sm"
+          >
+            <ListChecks className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-2" />
+            <span className="hidden sm:inline">Checklists</span>
+            <span className="sm:hidden">Lists</span>
+          </Button>
         </div>
 
         {/* Content */}
@@ -208,6 +219,7 @@ const DepartmentHead = () => {
         {activeTab === "approvals" && <TaskApproval departmentId={employee.department_id} approvedBy={employee.id} />}
         {activeTab === "map" && <MapView departmentId={employee.department_id} />}
         {activeTab === "team" && <DepartmentSelector departmentHeadId={employee.id} departmentHeadDeptId={employee.department_id} />}
+        {activeTab === "checklists" && <ChecklistManagement departmentHeadId={employee.id} departmentId={employee.department_id} />}
       </div>
     </div>
   );

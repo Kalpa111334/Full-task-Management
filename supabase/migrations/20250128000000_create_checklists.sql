@@ -4,7 +4,6 @@ CREATE TABLE IF NOT EXISTS public.checklists (
   title TEXT NOT NULL,
   description TEXT,
   created_by UUID REFERENCES public.employees(id) ON DELETE SET NULL,
-  assigned_to_dept_head UUID REFERENCES public.employees(id) ON DELETE SET NULL,
   department_id UUID REFERENCES public.departments(id) ON DELETE CASCADE,
   status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'in_progress', 'completed')),
   created_at TIMESTAMPTZ DEFAULT now(),
@@ -21,6 +20,10 @@ CREATE TABLE IF NOT EXISTS public.checklist_items (
   is_completed BOOLEAN DEFAULT false,
   completed_by UUID REFERENCES public.employees(id) ON DELETE SET NULL,
   completed_at TIMESTAMPTZ,
+  approval_status TEXT DEFAULT 'pending' CHECK (approval_status IN ('pending', 'approved', 'rejected')),
+  approved_by UUID REFERENCES public.employees(id) ON DELETE SET NULL,
+  approved_at TIMESTAMPTZ,
+  rejection_reason TEXT,
   created_at TIMESTAMPTZ DEFAULT now(),
   updated_at TIMESTAMPTZ DEFAULT now()
 );
@@ -37,11 +40,11 @@ CREATE TABLE IF NOT EXISTS public.checklist_assignments (
 
 -- Create indexes for better query performance
 CREATE INDEX IF NOT EXISTS idx_checklists_created_by ON public.checklists(created_by);
-CREATE INDEX IF NOT EXISTS idx_checklists_assigned_to_dept_head ON public.checklists(assigned_to_dept_head);
 CREATE INDEX IF NOT EXISTS idx_checklists_department_id ON public.checklists(department_id);
 CREATE INDEX IF NOT EXISTS idx_checklists_status ON public.checklists(status);
 CREATE INDEX IF NOT EXISTS idx_checklist_items_checklist_id ON public.checklist_items(checklist_id);
 CREATE INDEX IF NOT EXISTS idx_checklist_items_completed_by ON public.checklist_items(completed_by);
+CREATE INDEX IF NOT EXISTS idx_checklist_items_approval_status ON public.checklist_items(approval_status);
 CREATE INDEX IF NOT EXISTS idx_checklist_assignments_checklist_id ON public.checklist_assignments(checklist_id);
 CREATE INDEX IF NOT EXISTS idx_checklist_assignments_employee_id ON public.checklist_assignments(employee_id);
 

@@ -16,6 +16,7 @@ import NotFound from "./pages/NotFound";
 import SelfLocationPublisher from "@/components/map/SelfLocationPublisher";
 import ChecklistView from "@/components/department/ChecklistView";
 import EmployeeChecklistView from "@/components/employee/EmployeeChecklistView";
+import ChecklistApproval from "@/components/department/ChecklistApproval";
 
 const queryClient = new QueryClient();
 
@@ -36,6 +37,24 @@ const ChecklistRoute = () => {
   } else {
     // Admin can also view checklists
     return <ChecklistView departmentHeadId={employee.id} departmentId={null} />;
+  }
+};
+
+// Checklist Approval Route Component - for department head to approve/reject items
+const ChecklistApprovalRoute = () => {
+  const employeeData = localStorage.getItem("employee");
+  if (!employeeData) {
+    window.location.href = "/login";
+    return null;
+  }
+
+  const employee = JSON.parse(employeeData);
+  
+  if (employee.role === "department_head" || employee.role === "admin" || employee.role === "super_admin") {
+    return <ChecklistApproval departmentHeadId={employee.id} />;
+  } else {
+    window.location.href = "/login";
+    return null;
   }
 };
 
@@ -75,6 +94,7 @@ const App = () => {
             <Route path="/task/:id" element={<TaskDetail />} />
             <Route path="/task-action/:id" element={<TaskAction />} />
             <Route path="/checklist/:id" element={<ChecklistRoute />} />
+            <Route path="/checklist-approval/:id" element={<ChecklistApprovalRoute />} />
             <Route path="/index" element={<Index />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />

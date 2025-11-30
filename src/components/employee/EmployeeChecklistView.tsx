@@ -5,8 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { showSuccess, showError } from "@/lib/sweetalert";
-import { CheckCircle2, Clock, Circle } from "lucide-react";
-import { notifyChecklistItemCompleted } from "@/lib/whatsappService";
+import { CheckCircle2, Clock, Circle, XCircle } from "lucide-react";
+import { notifyChecklistCompleted } from "@/lib/whatsappService";
 
 interface ChecklistItem {
   id: string;
@@ -16,18 +16,20 @@ interface ChecklistItem {
   is_completed: boolean;
   completed_by: string | null;
   completed_at: string | null;
+  approval_status: string;
+  approved_by: string | null;
+  approved_at: string | null;
+  rejection_reason: string | null;
 }
 
 interface Checklist {
   id: string;
   title: string;
   description: string | null;
-  assigned_to_dept_head: string | null;
   department_id: string | null;
   status: string;
   items: ChecklistItem[];
-  dept_head: { name: string; id: string } | null;
-  created_by_employee: { name: string; id: string } | null;
+  created_by_employee: { name: string; id: string; department_id: string | null } | null;
 }
 
 interface EmployeeChecklistViewProps {
@@ -62,10 +64,13 @@ const EmployeeChecklistView = ({ employeeId }: EmployeeChecklistViewProps) => {
             order_index,
             is_completed,
             completed_by,
-            completed_at
+            completed_at,
+            approval_status,
+            approved_by,
+            approved_at,
+            rejection_reason
           ),
-          dept_head:employees!checklists_assigned_to_dept_head_fkey(name, id),
-          created_by_employee:employees!checklists_created_by_fkey(name, id)
+          created_by_employee:employees!checklists_created_by_fkey(name, id, department_id)
         `)
         .eq("id", id)
         .single();
@@ -104,9 +109,14 @@ const EmployeeChecklistView = ({ employeeId }: EmployeeChecklistViewProps) => {
       if (newStatus) {
         updateData.completed_by = employeeId;
         updateData.completed_at = new Date().toISOString();
+        updateData.approval_status = "pending";
       } else {
         updateData.completed_by = null;
         updateData.completed_at = null;
+        updateData.approval_status = "pending";
+        updateData.approved_by = null;
+        updateData.approved_at = null;
+        updateData.rejection_reason = null;
       }
 
       const { error } = await supabase
@@ -117,21 +127,29 @@ const EmployeeChecklistView = ({ employeeId }: EmployeeChecklistViewProps) => {
       if (error) throw error;
 
       // Refresh checklist data
-      await fetchChecklist();
+      const updatedChecklist = await fetchChecklistData();
 
-      // Send WhatsApp notification if item was completed
-      if (newStatus && checklist) {
-        const checklistUrl = `${window.location.origin}/checklist/${checklist.id}`;
-        await notifyChecklistItemCompleted(
-          checklist.title,
-          item.title,
-          employeeId,
-          checklist.assigned_to_dept_head,
-          checklist.created_by_employee?.id || null,
-          checklist.id,
-          checklistUrl
-        );
+      // Check if all items are now completed
+      if (newStatus && checklist && updatedChecklist) {
+        const allCompleted = updatedChecklist.items.every((i: any) => i.is_completed);
+        if (allCompleted && updatedChecklist.items.length > 0) {
+          // Notify department head that checklist is completed
+          const deptHeadId = updatedChecklist.created_by_employee?.id;
+          if (deptHeadId) {
+            const approvalUrl = `${window.location.origin}/checklist-approval/${checklist.id}`;
+            await notifyChecklistCompleted(
+              checklist.title,
+              employeeId,
+              deptHeadId,
+              checklist.id,
+              approvalUrl
+            );
+          }
+        }
       }
+
+      // Refresh UI
+      await fetchChecklist();
 
       showSuccess(newStatus ? "Item marked as completed!" : "Item unchecked");
     } catch (error: any) {
@@ -139,6 +157,30 @@ const EmployeeChecklistView = ({ employeeId }: EmployeeChecklistViewProps) => {
       showError(error?.message || "Failed to update item");
     } finally {
       setCompleting(null);
+    }
+  };
+
+  const fetchChecklistData = async () => {
+    if (!id) return null;
+    
+    try {
+      const { data, error } = await supabase
+        .from("checklists")
+        .select(`
+          *,
+          items:checklist_items(
+            id,
+            is_completed
+          )
+        `)
+        .eq("id", id)
+        .single();
+
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error("Error fetching checklist data:", error);
+      return null;
     }
   };
 
@@ -265,6 +307,25 @@ const EmployeeChecklistView = ({ employeeId }: EmployeeChecklistViewProps) => {
                         <p className="text-xs text-muted-foreground mt-2">
                           Completed on {new Date(item.completed_at).toLocaleDateString()}
                         </p>
+                      )}
+                      {item.approval_status === "approved" && (
+                        <p className="text-xs text-green-600 mt-2 flex items-center gap-1">
+                          <CheckCircle2 className="h-3 w-3" />
+                          Approved
+                        </p>
+                      )}
+                      {item.approval_status === "rejected" && (
+                        <div className="mt-2">
+                          <p className="text-xs text-red-600 flex items-center gap-1">
+                            <XCircle className="h-3 w-3" />
+                            Rejected
+                          </p>
+                          {item.rejection_reason && (
+                            <p className="text-xs text-red-600 mt-1">
+                              Reason: {item.rejection_reason}
+                            </p>
+                          )}
+                        </div>
                       )}
                     </div>
                     {isCompleting && (

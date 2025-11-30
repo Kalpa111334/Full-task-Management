@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { showSuccess, showError } from "@/lib/sweetalert";
-import { Users, Building2, ClipboardList, LogOut, Plus, AlertCircle, CheckSquare, Eye, FileText, ListChecks } from "lucide-react";
+import { Users, Building2, ClipboardList, LogOut, Plus, AlertCircle, CheckSquare, Eye, FileText } from "lucide-react";
 import EmployeeManagement from "@/components/admin/EmployeeManagement";
 import DepartmentManagement from "@/components/admin/DepartmentManagement";
 import AdminStats from "@/components/admin/AdminStats";
@@ -12,12 +12,11 @@ import TaskVerification from "@/components/admin/TaskVerification";
 import AdminTaskAssignment from "@/components/admin/AdminTaskAssignment";
 import AdminTaskReview from "@/components/admin/AdminTaskReview";
 import AdminReports from "@/components/admin/AdminReports";
-import ChecklistManagement from "@/components/admin/ChecklistManagement";
 import { PushNotificationToggle } from "@/components/PushNotificationToggle";
 
 const Admin = () => {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState<"overview" | "employees" | "departments" | "tasks" | "verifications" | "review" | "reports" | "checklists">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "employees" | "departments" | "tasks" | "verifications" | "review" | "reports">("overview");
   const [employee, setEmployee] = useState<any>(null);
 
   useEffect(() => {
@@ -144,16 +143,6 @@ const Admin = () => {
             <span className="hidden sm:inline">Reports</span>
             <span className="sm:hidden">Reports</span>
           </Button>
-          <Button
-            variant={activeTab === "checklists" ? "default" : "outline"}
-            onClick={() => setActiveTab("checklists")}
-            className={`${activeTab === "checklists" ? "bg-gradient-primary" : ""} whitespace-nowrap flex-shrink-0`}
-            size="sm"
-          >
-            <ListChecks className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-2" />
-            <span className="hidden sm:inline">Checklists</span>
-            <span className="sm:hidden">Lists</span>
-          </Button>
         </div>
 
         {/* Content */}
@@ -164,7 +153,6 @@ const Admin = () => {
         {activeTab === "verifications" && <TaskVerification adminId={employee.id} />}
         {activeTab === "review" && <AdminTaskReview adminId={employee.id} />}
         {activeTab === "reports" && <AdminReports adminId={employee.id} />}
-        {activeTab === "checklists" && <ChecklistManagement adminId={employee.id} />}
       </div>
     </div>
   );

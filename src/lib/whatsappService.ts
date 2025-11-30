@@ -799,3 +799,133 @@ export const notifyChecklistItemCompleted = async (
     }
   }
 };
+
+/**
+ * Notification: Checklist completed - notify department head
+ */
+export const notifyChecklistCompleted = async (
+  checklistTitle: string,
+  employeeId: string,
+  deptHeadId: string,
+  checklistId: string,
+  approvalUrl: string
+): Promise<boolean> => {
+  console.log('📨 Starting WhatsApp notification for checklist completion:', deptHeadId);
+  
+  // Fetch employee name
+  let employeeName = "Employee";
+  try {
+    const { data: employee } = await supabase
+      .from("employees")
+      .select("name")
+      .eq("id", employeeId)
+      .single();
+    if (employee) {
+      employeeName = employee.name;
+    }
+  } catch (error) {
+    console.error("Error fetching employee name:", error);
+  }
+
+  const phone = await getEmployeePhone(deptHeadId);
+  if (!phone) {
+    console.warn('⚠️ No phone number found for department head:', deptHeadId);
+    return false;
+  }
+
+  console.log('✅ Phone found, sending WhatsApp to:', phone);
+
+  let message = `✅ *Checklist Completed*\n\n` +
+    `*${employeeName}* has completed all items in the checklist.\n\n` +
+    `📝 *Checklist:* ${checklistTitle}\n\n` +
+    `🔗 *Click here to review and approve/reject items:*\n${approvalUrl}\n\n` +
+    `Please review the completed checklist and approve or reject each item.\n\n` +
+    `_Task Management System_`;
+
+  const result = await sendWhatsAppMessage({
+    number: phone,
+    type: 'text',
+    message,
+  });
+
+  console.log('📱 WhatsApp notification result:', result ? '✅ Sent' : '❌ Failed');
+  return result;
+};
+
+/**
+ * Notification: Checklist item approved - notify employee
+ */
+export const notifyChecklistItemApproved = async (
+  checklistTitle: string,
+  itemTitle: string,
+  employeeId: string,
+  checklistId: string,
+  checklistUrl: string
+): Promise<boolean> => {
+  console.log('📨 Starting WhatsApp notification for item approval:', employeeId);
+  
+  const phone = await getEmployeePhone(employeeId);
+  if (!phone) {
+    console.warn('⚠️ No phone number found for employee:', employeeId);
+    return false;
+  }
+
+  console.log('✅ Phone found, sending WhatsApp to:', phone);
+
+  let message = `🎉 *Checklist Item Approved*\n\n` +
+    `Your checklist item has been approved!\n\n` +
+    `📝 *Checklist:* ${checklistTitle}\n` +
+    `✓ *Approved Item:* ${itemTitle}\n\n` +
+    `🔗 *View Checklist:*\n${checklistUrl}\n\n` +
+    `Great work! The item has been marked as approved.\n\n` +
+    `_Task Management System_`;
+
+  const result = await sendWhatsAppMessage({
+    number: phone,
+    type: 'text',
+    message,
+  });
+
+  console.log('📱 WhatsApp notification result:', result ? '✅ Sent' : '❌ Failed');
+  return result;
+};
+
+/**
+ * Notification: Checklist item rejected - notify employee
+ */
+export const notifyChecklistItemRejected = async (
+  checklistTitle: string,
+  itemTitle: string,
+  employeeId: string,
+  rejectionReason: string,
+  checklistId: string,
+  checklistUrl: string
+): Promise<boolean> => {
+  console.log('📨 Starting WhatsApp notification for item rejection:', employeeId);
+  
+  const phone = await getEmployeePhone(employeeId);
+  if (!phone) {
+    console.warn('⚠️ No phone number found for employee:', employeeId);
+    return false;
+  }
+
+  console.log('✅ Phone found, sending WhatsApp to:', phone);
+
+  let message = `❌ *Checklist Item Rejected*\n\n` +
+    `Your checklist item has been rejected.\n\n` +
+    `📝 *Checklist:* ${checklistTitle}\n` +
+    `✗ *Rejected Item:* ${itemTitle}\n` +
+    `📝 *Reason:* ${rejectionReason}\n\n` +
+    `🔗 *View Checklist:*\n${checklistUrl}\n\n` +
+    `Please review the feedback and make necessary corrections.\n\n` +
+    `_Task Management System_`;
+
+  const result = await sendWhatsAppMessage({
+    number: phone,
+    type: 'text',
+    message,
+  });
+
+  console.log('📱 WhatsApp notification result:', result ? '✅ Sent' : '❌ Failed');
+  return result;
+};

@@ -4,10 +4,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { showSuccess, showError } from "@/lib/sweetalert";
+import { showError } from "@/lib/sweetalert";
 import { Users, CheckCircle2, Clock } from "lucide-react";
-import { notifyEmployeeChecklistAssigned } from "@/lib/whatsappService";
 
 interface ChecklistItem {
   id: string;
@@ -24,7 +22,6 @@ interface Checklist {
   id: string;
   title: string;
   description: string | null;
-  assigned_to_dept_head: string | null;
   department_id: string | null;
   status: string;
   items: ChecklistItem[];
@@ -35,12 +32,6 @@ interface Checklist {
   }>;
 }
 
-interface Employee {
-  id: string;
-  name: string;
-  department_id: string | null;
-}
-
 interface ChecklistViewProps {
   departmentHeadId: string;
   departmentId: string | null;
@@ -49,17 +40,13 @@ interface ChecklistViewProps {
 const ChecklistView = ({ departmentHeadId, departmentId }: ChecklistViewProps) => {
   const { id } = useParams<{ id: string }>();
   const [checklist, setChecklist] = useState<Checklist | null>(null);
-  const [employees, setEmployees] = useState<Employee[]>([]);
-  const [selectedEmployee, setSelectedEmployee] = useState<string>("");
   const [loading, setLoading] = useState(true);
-  const [assigning, setAssigning] = useState(false);
 
   useEffect(() => {
     if (id) {
       fetchChecklist();
-      fetchEmployees();
     }
-  }, [id, departmentId]);
+  }, [id]);
 
   const fetchChecklist = async () => {
     if (!id) return;
@@ -78,6 +65,7 @@ const ChecklistView = ({ departmentHeadId, departmentId }: ChecklistViewProps) =
             is_completed,
             completed_by,
             completed_at,
+            approval_status,
             completed_by_employee:employees!checklist_items_completed_by_fkey(name)
           ),
           assigned_employees:checklist_assignments(
@@ -105,78 +93,6 @@ const ChecklistView = ({ departmentHeadId, departmentId }: ChecklistViewProps) =
     }
   };
 
-  const fetchEmployees = async () => {
-    if (!departmentId) return;
-
-    try {
-      const { data, error } = await supabase
-        .from("employees")
-        .select("id, name, department_id")
-        .eq("department_id", departmentId)
-        .eq("role", "employee")
-        .eq("is_active", true)
-        .order("name");
-
-      if (error) throw error;
-      setEmployees(data || []);
-    } catch (error) {
-      console.error("Error fetching employees:", error);
-      showError("Failed to fetch employees");
-    }
-  };
-
-  const handleAssignToEmployee = async () => {
-    if (!selectedEmployee || !id) {
-      showError("Please select an employee");
-      return;
-    }
-
-    setAssigning(true);
-    try {
-      // Check if already assigned
-      const { data: existing } = await supabase
-        .from("checklist_assignments")
-        .select("id")
-        .eq("checklist_id", id)
-        .eq("employee_id", selectedEmployee)
-        .single();
-
-      if (existing) {
-        showError("Checklist is already assigned to this employee");
-        setAssigning(false);
-        return;
-      }
-
-      // Create assignment
-      const { error: assignError } = await supabase
-        .from("checklist_assignments")
-        .insert({
-          checklist_id: id,
-          employee_id: selectedEmployee,
-          assigned_by: departmentHeadId,
-        });
-
-      if (assignError) throw assignError;
-
-      // Send WhatsApp notification
-      const checklistUrl = `${window.location.origin}/checklist/${id}`;
-      await notifyEmployeeChecklistAssigned(
-        checklist?.title || "Checklist",
-        selectedEmployee,
-        id,
-        checklistUrl
-      );
-
-      showSuccess("Checklist assigned successfully!");
-      setSelectedEmployee("");
-      fetchChecklist();
-    } catch (error: any) {
-      console.error("Error assigning checklist:", error);
-      showError(error?.message || "Failed to assign checklist");
-    } finally {
-      setAssigning(false);
-    }
-  };
 
   const getProgress = () => {
     if (!checklist?.items) return { completed: 0, total: 0, percentage: 0 };
@@ -209,8 +125,6 @@ const ChecklistView = ({ departmentHeadId, departmentId }: ChecklistViewProps) =
   }
 
   const progress = getProgress();
-  const assignedEmployeeIds = checklist.assigned_employees?.map(ae => ae.employee_id) || [];
-  const availableEmployees = employees.filter(emp => !assignedEmployeeIds.includes(emp.id));
 
   return (
     <div>
@@ -245,61 +159,30 @@ const ChecklistView = ({ departmentHeadId, departmentId }: ChecklistViewProps) =
         </CardContent>
       </Card>
 
-      {/* Assign to Employee Section */}
-      <Card className="mb-6">
-        <CardHeader>
-          <CardTitle>Assign to Employees</CardTitle>
-          <CardDescription>
-            Assign this checklist to employees in your department
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="flex gap-2">
-            <Select value={selectedEmployee} onValueChange={setSelectedEmployee}>
-              <SelectTrigger className="flex-1">
-                <SelectValue placeholder="Select employee" />
-              </SelectTrigger>
-              <SelectContent>
-                {availableEmployees.length === 0 ? (
-                  <div className="p-2 text-sm text-muted-foreground">
-                    No available employees
-                  </div>
-                ) : (
-                  availableEmployees.map((emp) => (
-                    <SelectItem key={emp.id} value={emp.id}>
-                      {emp.name}
-                    </SelectItem>
-                  ))
-                )}
-              </SelectContent>
-            </Select>
-            <Button
-              onClick={handleAssignToEmployee}
-              disabled={!selectedEmployee || assigning || availableEmployees.length === 0}
-              className="bg-gradient-primary"
-            >
-              {assigning ? "Assigning..." : "Assign"}
-            </Button>
-          </div>
-
-          {checklist.assigned_employees && checklist.assigned_employees.length > 0 && (
-            <div className="mt-4">
-              <p className="text-sm font-medium mb-2">Assigned Employees:</p>
-              <div className="flex flex-wrap gap-2">
-                {checklist.assigned_employees.map((assignment) => (
-                  <div
-                    key={assignment.id}
-                    className="flex items-center gap-2 px-3 py-1 bg-primary/10 rounded-full"
-                  >
-                    <Users className="h-4 w-4 text-primary" />
-                    <span className="text-sm">{assignment.employee.name}</span>
-                  </div>
-                ))}
-              </div>
+      {/* Assigned Employees */}
+      {checklist.assigned_employees && checklist.assigned_employees.length > 0 && (
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle>Assigned Employees</CardTitle>
+            <CardDescription>
+              Employees assigned to this checklist
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-wrap gap-2">
+              {checklist.assigned_employees.map((assignment) => (
+                <div
+                  key={assignment.id}
+                  className="flex items-center gap-2 px-3 py-1 bg-primary/10 rounded-full"
+                >
+                  <Users className="h-4 w-4 text-primary" />
+                  <span className="text-sm">{assignment.employee.name}</span>
+                </div>
+              ))}
             </div>
-          )}
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Checklist Items */}
       <Card>

@@ -79,6 +79,7 @@ const EmployeeManagement = ({ adminId }: EmployeeManagementProps = {}) => {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
   const [selectedAdminDepartments, setSelectedAdminDepartments] = useState<string[]>([]);
+  const [selectedDeptHeadDepartments, setSelectedDeptHeadDepartments] = useState<string[]>([]);
   const [adminDepartmentIds, setAdminDepartmentIds] = useState<string[]>([]);
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
@@ -214,7 +215,7 @@ const EmployeeManagement = ({ adminId }: EmployeeManagementProps = {}) => {
       return;
     }
 
-    // Fetch admin departments for each admin/super_admin
+    // Fetch admin departments for each admin/super_admin and department head departments
     const employeesWithDepts = await Promise.all(
       (data || []).map(async (employee) => {
         if (employee.role === "admin" || employee.role === "super_admin") {
@@ -229,6 +230,20 @@ const EmployeeManagement = ({ adminId }: EmployeeManagementProps = {}) => {
 
           return { ...employee, admin_departments: deptNames };
         }
+        
+        if (employee.role === "department_head") {
+          const { data: deptHeadDepts } = await supabase
+            .from("department_head_departments")
+            .select("department_id, departments:departments(name)")
+            .eq("department_head_id", employee.id);
+
+          const deptNames = (deptHeadDepts || [])
+            .map((dhd: any) => dhd.departments?.name)
+            .filter(Boolean);
+
+          return { ...employee, dept_head_departments: deptNames };
+        }
+        
         return employee;
       })
     );
@@ -270,6 +285,20 @@ const EmployeeManagement = ({ adminId }: EmployeeManagementProps = {}) => {
     }
 
     return (data || []).map(ad => ad.department_id);
+  };
+
+  const loadDeptHeadDepartments = async (employeeId: string) => {
+    const { data, error } = await supabase
+      .from("department_head_departments")
+      .select("department_id")
+      .eq("department_head_id", employeeId);
+
+    if (error) {
+      console.error("Failed to fetch department head departments:", error);
+      return [];
+    }
+
+    return (data || []).map(dhd => dhd.department_id);
   };
 
   // Filter employees based on search and filters
@@ -446,12 +475,48 @@ const EmployeeManagement = ({ adminId }: EmployeeManagementProps = {}) => {
     }
   };
 
+  const updateDeptHeadDepartments = async (deptHeadId: string, departmentIds: string[]) => {
+    // First, delete existing department head department associations
+    const { error: deleteError } = await supabase
+      .from("department_head_departments")
+      .delete()
+      .eq("department_head_id", deptHeadId);
+
+    if (deleteError) {
+      console.error("Failed to delete existing department head departments:", deleteError);
+      throw deleteError;
+    }
+
+    // Then insert new associations
+    if (departmentIds.length > 0) {
+      const insertData = departmentIds.map(deptId => ({
+        department_head_id: deptHeadId,
+        department_id: deptId
+      }));
+
+      const { error: insertError } = await supabase
+        .from("department_head_departments")
+        .insert(insertData);
+
+      if (insertError) {
+        console.error("Failed to insert department head departments:", insertError);
+        throw insertError;
+      }
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     // Validation: If role is admin or super_admin and no departments selected
     if ((formData.role === "admin" || formData.role === "super_admin") && selectedAdminDepartments.length === 0) {
       showError("Please select at least one department for admin role");
+      return;
+    }
+
+    // Validation: If role is department_head and no departments selected
+    if (formData.role === "department_head" && selectedDeptHeadDepartments.length === 0) {
+      showError("Please select at least one department for department head role");
       return;
     }
 
@@ -493,6 +558,17 @@ const EmployeeManagement = ({ adminId }: EmployeeManagementProps = {}) => {
           await updateAdminDepartments(editingEmployee.id, selectedAdminDepartments);
         } catch (err) {
           console.error("Failed to update admin departments:", err);
+          showError("Employee updated but failed to update department assignments");
+          return;
+        }
+      }
+
+      // Update department head departments if role is department_head
+      if (formData.role === "department_head") {
+        try {
+          await updateDeptHeadDepartments(editingEmployee.id, selectedDeptHeadDepartments);
+        } catch (err) {
+          console.error("Failed to update department head departments:", err);
           showError("Employee updated but failed to update department assignments");
           return;
         }
@@ -715,8 +791,15 @@ const EmployeeManagement = ({ adminId }: EmployeeManagementProps = {}) => {
     if (employee.role === "admin" || employee.role === "super_admin") {
       const adminDepts = await loadAdminDepartments(employee.id);
       setSelectedAdminDepartments(adminDepts);
+      setSelectedDeptHeadDepartments([]);
+    } else if (employee.role === "department_head") {
+      // Load department head departments
+      const deptHeadDepts = await loadDeptHeadDepartments(employee.id);
+      setSelectedDeptHeadDepartments(deptHeadDepts);
+      setSelectedAdminDepartments([]);
     } else {
       setSelectedAdminDepartments([]);
+      setSelectedDeptHeadDepartments([]);
     }
 
     setIsDialogOpen(true);
@@ -725,6 +808,7 @@ const EmployeeManagement = ({ adminId }: EmployeeManagementProps = {}) => {
   const resetForm = () => {
     setEditingEmployee(null);
     setSelectedAdminDepartments([]);
+    setSelectedDeptHeadDepartments([]);
     setFormData({
       name: "",
       email: "",
@@ -747,6 +831,14 @@ const EmployeeManagement = ({ adminId }: EmployeeManagementProps = {}) => {
 
   const toggleAdminDepartment = (departmentId: string) => {
     setSelectedAdminDepartments(prev => 
+      prev.includes(departmentId)
+        ? prev.filter(id => id !== departmentId)
+        : [...prev, departmentId]
+    );
+  };
+
+  const toggleDeptHeadDepartment = (departmentId: string) => {
+    setSelectedDeptHeadDepartments(prev => 
       prev.includes(departmentId)
         ? prev.filter(id => id !== departmentId)
         : [...prev, departmentId]
@@ -825,6 +917,10 @@ const EmployeeManagement = ({ adminId }: EmployeeManagementProps = {}) => {
                     if (value !== "admin" && value !== "super_admin") {
                       setSelectedAdminDepartments([]);
                     }
+                    // Clear department head departments when changing away from department_head role
+                    if (value !== "department_head") {
+                      setSelectedDeptHeadDepartments([]);
+                    }
                   }}>
                     <SelectTrigger>
                       <SelectValue />
@@ -885,6 +981,40 @@ const EmployeeManagement = ({ adminId }: EmployeeManagementProps = {}) => {
                     ))}
                   </div>
                   {selectedAdminDepartments.length === 0 && (
+                    <p className="text-xs text-destructive mt-2">
+                      Please select at least one department
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/* Multi-Department Selection for Department Head */}
+              {formData.role === "department_head" && (
+                <div className="space-y-2 border rounded-lg p-4 bg-muted/30">
+                  <Label className="text-base font-semibold">
+                    Manage Departments * 
+                    <span className="text-xs font-normal text-muted-foreground ml-2">
+                      (Select departments this department head can manage)
+                    </span>
+                  </Label>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-60 overflow-y-auto">
+                    {departments.map((dept) => (
+                      <div key={dept.id} className="flex items-center space-x-2">
+                        <Checkbox
+                          id={`dept-head-${dept.id}`}
+                          checked={selectedDeptHeadDepartments.includes(dept.id)}
+                          onCheckedChange={() => toggleDeptHeadDepartment(dept.id)}
+                        />
+                        <Label
+                          htmlFor={`dept-head-${dept.id}`}
+                          className="text-sm font-normal cursor-pointer"
+                        >
+                          {dept.name}
+                        </Label>
+                      </div>
+                    ))}
+                  </div>
+                  {selectedDeptHeadDepartments.length === 0 && (
                     <p className="text-xs text-destructive mt-2">
                       Please select at least one department
                     </p>
@@ -996,6 +1126,18 @@ const EmployeeManagement = ({ adminId }: EmployeeManagementProps = {}) => {
                     <p className="text-xs font-semibold text-muted-foreground mb-1">Manages Departments:</p>
                     <div className="flex flex-wrap gap-1">
                       {employee.admin_departments.map((deptName, idx) => (
+                        <Badge key={idx} variant="secondary" className="text-xs">
+                          {deptName}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {employee.role === "department_head" && (employee as any).dept_head_departments && (employee as any).dept_head_departments.length > 0 && (
+                  <div className="mt-2">
+                    <p className="text-xs font-semibold text-muted-foreground mb-1">Manages Departments:</p>
+                    <div className="flex flex-wrap gap-1">
+                      {(employee as any).dept_head_departments.map((deptName: string, idx: number) => (
                         <Badge key={idx} variant="secondary" className="text-xs">
                           {deptName}
                         </Badge>
