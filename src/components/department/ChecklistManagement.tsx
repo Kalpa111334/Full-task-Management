@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -8,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { showSuccess, showError } from "@/lib/sweetalert";
-import { Plus, Trash2, ClipboardList, Users } from "lucide-react";
+import { Plus, Trash2, ClipboardList, Users, CheckCircle2, XCircle } from "lucide-react";
 import { notifyEmployeeChecklistAssigned } from "@/lib/whatsappService";
 
 interface ChecklistItem {
@@ -28,6 +29,7 @@ interface Checklist {
   items_count: number;
   completed_items_count: number;
   assigned_employees_count: number;
+  pending_approval_count?: number;
 }
 
 interface Employee {
@@ -62,6 +64,7 @@ const getDeptHeadDepartments = async (deptHeadId: string): Promise<string[]> => 
 };
 
 const ChecklistManagement = ({ departmentHeadId, departmentId }: ChecklistManagementProps) => {
+  const navigate = useNavigate();
   const [checklists, setChecklists] = useState<Checklist[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [deptHeadDepartmentIds, setDeptHeadDepartmentIds] = useState<string[]>([]);
@@ -101,7 +104,7 @@ const ChecklistManagement = ({ departmentHeadId, departmentId }: ChecklistManage
         .from("checklists")
         .select(`
           *,
-          items:checklist_items(id, is_completed),
+          items:checklist_items(id, is_completed, approval_status),
           assigned_employees:checklist_assignments(employee_id)
         `)
         .eq("created_by", departmentHeadId);
@@ -124,12 +127,16 @@ const ChecklistManagement = ({ departmentHeadId, departmentId }: ChecklistManage
       const checklistsWithCounts = (data || []).map((checklist: any) => {
         const allItems = checklist.items || [];
         const completedItems = allItems.filter((item: any) => item.is_completed);
+        const pendingApprovalItems = completedItems.filter((item: any) => 
+          item.approval_status === "pending"
+        );
         const assignedEmployees = checklist.assigned_employees || [];
         return {
           ...checklist,
           items_count: allItems.length,
           completed_items_count: completedItems.length,
           assigned_employees_count: assignedEmployees.length,
+          pending_approval_count: pendingApprovalItems.length,
         };
       });
 
@@ -477,6 +484,7 @@ const ChecklistManagement = ({ departmentHeadId, departmentId }: ChecklistManage
                     <TableHead>Progress</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Created</TableHead>
+                    <TableHead>Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -497,6 +505,33 @@ const ChecklistManagement = ({ departmentHeadId, departmentId }: ChecklistManage
                       <TableCell>{getStatusBadge(checklist.status)}</TableCell>
                       <TableCell>
                         {new Date(checklist.created_at).toLocaleDateString()}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex gap-2">
+                          <Button
+                            onClick={() => navigate(`/checklist-approval/${checklist.id}`)}
+                            variant="outline"
+                            size="sm"
+                            className="bg-green-50 hover:bg-green-100 text-green-700 border-green-200"
+                          >
+                            <CheckCircle2 className="h-3 w-3 mr-1" />
+                            Approve
+                          </Button>
+                          <Button
+                            onClick={() => navigate(`/checklist-approval/${checklist.id}`)}
+                            variant="outline"
+                            size="sm"
+                            className="bg-red-50 hover:bg-red-100 text-red-700 border-red-200"
+                          >
+                            <XCircle className="h-3 w-3 mr-1" />
+                            Reject
+                          </Button>
+                        </div>
+                        {checklist.pending_approval_count && checklist.pending_approval_count > 0 && (
+                          <p className="text-xs text-yellow-600 mt-1">
+                            {checklist.pending_approval_count} pending
+                          </p>
+                        )}
                       </TableCell>
                     </TableRow>
                   ))}
