@@ -93,6 +93,91 @@ const ChecklistApproval = ({ departmentHeadId }: ChecklistApprovalProps) => {
     }
   };
 
+  const updateChecklistStatusIfNeeded = async () => {
+    if (!id) return;
+    
+    try {
+      // Fetch all items with their approval status
+      const { data: allItems, error: itemsError } = await supabase
+        .from("checklist_items")
+        .select("id, is_completed, approval_status")
+        .eq("checklist_id", id);
+      
+      if (itemsError || !allItems || allItems.length === 0) return;
+      
+      const completedItems = allItems.filter(item => item.is_completed);
+      const totalItems = allItems.length;
+      
+      // Determine new status based on completion and approval
+      let newStatus = "pending";
+      if (completedItems.length > 0) {
+        const allCompletedApproved = completedItems.every(item => item.approval_status === "approved");
+        // If all items are completed AND all completed items are approved, status is "completed"
+        if (allCompletedApproved && completedItems.length === totalItems) {
+          newStatus = "completed";
+        } else {
+          // If some items are completed but not all approved, status is "in_progress"
+          newStatus = "in_progress";
+        }
+      }
+      
+      // Always update status to reflect current state
+      const { error: updateError } = await supabase
+        .from("checklists")
+        .update({ status: newStatus })
+        .eq("id", id);
+      
+      if (!updateError) {
+        // Refresh checklist data to show updated status
+        await fetchChecklist();
+      } else {
+        console.error("Error updating checklist status:", updateError);
+      }
+    } catch (error) {
+      console.error("Error updating checklist status:", error);
+    }
+  };
+
+  const checkAndUpdateChecklistStatus = async () => {
+    if (!checklist || !id) return;
+    
+    try {
+      // Fetch all items with their approval status
+      const { data: allItems, error: itemsError } = await supabase
+        .from("checklist_items")
+        .select("id, is_completed, approval_status")
+        .eq("checklist_id", id);
+      
+      if (itemsError) {
+        console.error("Error fetching items:", itemsError);
+        return;
+      }
+      
+      if (!allItems || allItems.length === 0) return;
+      
+      const completedItems = allItems.filter(item => item.is_completed);
+      const allCompletedApproved = completedItems.length > 0 && 
+        completedItems.every(item => item.approval_status === "approved");
+      
+      // If all completed items are approved, update checklist status to "completed"
+      if (allCompletedApproved && checklist.status !== "completed") {
+        const { error: updateError } = await supabase
+          .from("checklists")
+          .update({ status: "completed" })
+          .eq("id", id);
+        
+        if (updateError) {
+          console.error("Error updating checklist status:", updateError);
+        } else {
+          // Refresh checklist data
+          await fetchChecklist();
+        }
+      }
+    } catch (error) {
+      console.error("Error checking checklist status:", error);
+    }
+  };
+
   const handleApprove = async (itemId: string) => {
     if (!checklist) return;
     
@@ -124,7 +209,12 @@ const ChecklistApproval = ({ departmentHeadId }: ChecklistApprovalProps) => {
       }
 
       showSuccess("Item approved successfully!");
+      
+      // Refresh checklist first
       await fetchChecklist();
+      
+      // Check and update checklist status immediately
+      await updateChecklistStatusIfNeeded();
     } catch (error: any) {
       console.error("Error approving item:", error);
       showError(error?.message || "Failed to approve item");

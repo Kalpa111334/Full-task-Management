@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -30,6 +30,7 @@ interface Checklist {
   completed_items_count: number;
   assigned_employees_count: number;
   pending_approval_count?: number;
+  all_items_approved?: boolean;
 }
 
 interface Employee {
@@ -65,6 +66,7 @@ const getDeptHeadDepartments = async (deptHeadId: string): Promise<string[]> => 
 
 const ChecklistManagement = ({ departmentHeadId, departmentId }: ChecklistManagementProps) => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [checklists, setChecklists] = useState<Checklist[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [deptHeadDepartmentIds, setDeptHeadDepartmentIds] = useState<string[]>([]);
@@ -92,6 +94,26 @@ const ChecklistManagement = ({ departmentHeadId, departmentId }: ChecklistManage
       fetchEmployees();
     }
   }, [deptHeadDepartmentIds, departmentId, departmentHeadId]);
+
+  // Refresh checklists when returning from approval page or when location changes
+  useEffect(() => {
+    if (deptHeadDepartmentIds.length > 0 || departmentId) {
+      fetchChecklists();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.pathname]);
+  
+  // Also refresh on window focus
+  useEffect(() => {
+    const handleFocus = () => {
+      if (deptHeadDepartmentIds.length > 0 || departmentId) {
+        fetchChecklists();
+      }
+    };
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deptHeadDepartmentIds, departmentId]);
 
   const fetchDeptHeadDepartments = async () => {
     const deptIds = await getDeptHeadDepartments(departmentHeadId);
@@ -130,6 +152,8 @@ const ChecklistManagement = ({ departmentHeadId, departmentId }: ChecklistManage
         const pendingApprovalItems = completedItems.filter((item: any) => 
           item.approval_status === "pending"
         );
+        const allCompletedApproved = completedItems.length > 0 && 
+          completedItems.every((item: any) => item.approval_status === "approved");
         const assignedEmployees = checklist.assigned_employees || [];
         return {
           ...checklist,
@@ -137,6 +161,7 @@ const ChecklistManagement = ({ departmentHeadId, departmentId }: ChecklistManage
           completed_items_count: completedItems.length,
           assigned_employees_count: assignedEmployees.length,
           pending_approval_count: pendingApprovalItems.length,
+          all_items_approved: allCompletedApproved,
         };
       });
 
@@ -507,30 +532,39 @@ const ChecklistManagement = ({ departmentHeadId, departmentId }: ChecklistManage
                         {new Date(checklist.created_at).toLocaleDateString()}
                       </TableCell>
                       <TableCell>
-                        <div className="flex gap-2">
-                          <Button
-                            onClick={() => navigate(`/checklist-approval/${checklist.id}`)}
-                            variant="outline"
-                            size="sm"
-                            className="bg-green-50 hover:bg-green-100 text-green-700 border-green-200"
-                          >
-                            <CheckCircle2 className="h-3 w-3 mr-1" />
-                            Approve
-                          </Button>
-                          <Button
-                            onClick={() => navigate(`/checklist-approval/${checklist.id}`)}
-                            variant="outline"
-                            size="sm"
-                            className="bg-red-50 hover:bg-red-100 text-red-700 border-red-200"
-                          >
-                            <XCircle className="h-3 w-3 mr-1" />
-                            Reject
-                          </Button>
-                        </div>
-                        {checklist.pending_approval_count && checklist.pending_approval_count > 0 && (
-                          <p className="text-xs text-yellow-600 mt-1">
-                            {checklist.pending_approval_count} pending
-                          </p>
+                        {checklist.status === "completed" || (checklist.all_items_approved && checklist.completed_items_count === checklist.items_count) ? (
+                          <div className="flex items-center gap-2">
+                            <CheckCircle2 className="h-4 w-4 text-green-600" />
+                            <span className="text-sm font-medium text-green-700">Approved</span>
+                          </div>
+                        ) : (
+                          <>
+                            <div className="flex gap-2">
+                              <Button
+                                onClick={() => navigate(`/checklist-approval/${checklist.id}`)}
+                                variant="outline"
+                                size="sm"
+                                className="bg-green-50 hover:bg-green-100 text-green-700 border-green-200"
+                              >
+                                <CheckCircle2 className="h-3 w-3 mr-1" />
+                                Approve
+                              </Button>
+                              <Button
+                                onClick={() => navigate(`/checklist-approval/${checklist.id}`)}
+                                variant="outline"
+                                size="sm"
+                                className="bg-red-50 hover:bg-red-100 text-red-700 border-red-200"
+                              >
+                                <XCircle className="h-3 w-3 mr-1" />
+                                Reject
+                              </Button>
+                            </div>
+                            {checklist.pending_approval_count && checklist.pending_approval_count > 0 && (
+                              <p className="text-xs text-yellow-600 mt-1">
+                                {checklist.pending_approval_count} pending
+                              </p>
+                            )}
+                          </>
                         )}
                       </TableCell>
                     </TableRow>
